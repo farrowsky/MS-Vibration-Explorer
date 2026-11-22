@@ -13,7 +13,7 @@ const STATE_SHORT = { initial: 'Initial design', infill: 'Upsize infills', girde
 const STATE_KEYS = ['initial', 'infill', 'girder', 'conc', 'steel', 'best'];
 const STATE_COLOR = { initial: '#8b98a5', infill: '#85C1E9', girder: '#FCAE2E', conc: '#E57373', steel: '#4178BE', best: '#A3B376', check: '#ffffff' };
 
-const DEFAULTS = { system: 'composite', mode: 'optimize', g: 30, i: 30, conc: 0, deck: 3, pcc: 50, use: 3, clear: 3, fl: 200, fw: 200, is: null, gs: null, view: 'best' };
+const DEFAULTS = { system: 'composite', mode: 'optimize', g: 30, i: 30, ninf: null, slab: null, conc: 0, deck: 3, pcc: 50, use: 3, clear: 3, fl: 200, fw: 200, is: null, gs: null, view: 'best' };
 
 export function createDesigner(root, ctx) {
   const S = { ...DEFAULTS, ...store.get('designer', {}), auto: store.get('auto', true) };
@@ -66,7 +66,7 @@ export function createDesigner(root, ctx) {
     const look = S.conc === 1 ? 1 : 0;
     const smax = window.__msveMeta?.systems?.[S.system]?.spacing_lookup?.[`${look}|${S.deck}`] || 10;
     const N = result?.ok ? (result.captured?.[S.view === 'check' ? 'check' : 'initial']?.values?.NumInfill ?? null) : null;
-    const n = N ?? Math.max(1, Math.ceil(g / smax - 1));
+    const n = S.ninf || N || Math.max(1, Math.ceil(g / smax - 1));
     let lines = '';
     for (let q = 0; q <= n + 1; q++) {
       const x = ox + w * q / (n + 1);
@@ -111,16 +111,23 @@ export function createDesigner(root, ctx) {
       </div>
       <div id="assume"></div>
 
-      <div class="panel-title">Bay geometry</div>
+      <div class="panel-title">Bay</div>
       <div style="display:flex;justify-content:center;margin:-4px 0 6px" id="plan"></div>
-      ${spanField('g', 'Girder span L<sub>g</sub>', 'Girders run column to column along this span; the infill beams frame into them. The deck ribs run parallel to the girders. Paper studied 10–50 ft.')}
-      ${spanField('i', 'Infill beam span L<sub>j</sub>', 'Infill (filler) beams span between the two girders; the solver spaces them along the girder from the deck table. Paper studied 10–50 ft.')}
+      ${spanField('g', 'Girder span L<sub>g</sub>', 'Column to column along the girders. The beams frame into the girders and the deck ribs run parallel to the girders. Paper studied 10–50 ft.')}
+      ${spanField('i', 'Beam span L<sub>j</sub>', 'Span of the infill (filler) beams, girder to girder. Paper studied 10–50 ft.')}
+      <div class="field"><div class="field-label"><span>Beams between girders${help('Number of interior infill beams. Auto: the paper\'s solver sets it from the deck table (the widest spacing a 22 ga deck with minimum topping can span). Setting it yourself is outside the paper\'s method.')}</span><span class="hint" id="ninfV"></span></div>
+        <div class="row"><div class="seg" id="ninfAuto"><button data-v="auto">Auto</button></div>
+          <div class="num-box" style="flex:1"><button type="button" class="btn btn-ghost btn-sm" id="ninfDn" aria-label="Fewer beams" style="border:0;padding:4px 10px">−</button>
+          <input type="number" id="ninfN" min="1" max="14" step="1" aria-label="Number of interior beams" style="width:40px;text-align:center;padding-left:0">
+          <button type="button" class="btn btn-ghost btn-sm" id="ninfUp" aria-label="More beams" style="border:0;padding:4px 10px">+</button><span style="margin-left:auto">beams</span></div></div></div>
 
-      <div class="panel-title">Slab and deck</div>
+      <div class="panel-title">Slab</div>
       <div class="field"><div class="field-label"><span>Concrete</span></div>
         <div class="seg seg-block" id="concSeg"><button data-v="0">Normal-weight <span class="muted tiny">145 pcf</span></button><button data-v="1">Lightweight <span class="muted tiny">110 pcf</span></button></div></div>
       <div class="field"><div class="field-label"><span>Deck rib depth${help('Composite steel deck profile (VL type). The solver picks the gauge and the concrete above the ribs from its deck table, for the infill spacing it chose.')}</span></div>
         <div class="deck-icons" id="deckBtns">${[1.5, 2, 3].map(d => `<button class="deck-btn" data-v="${d}">${deckIcon(d)}${d}" deck</button>`).join('')}</div></div>
+      <div class="field"><div class="field-label"><span>Total slab depth${help('Deck rib depth plus concrete above the ribs. Auto: the solver picks the lightest deck and topping in its table that carry the load. The other options are the depths the deck table offers for this deck and concrete; choosing one is outside the paper\'s method.')}</span><span class="hint" id="slabV"></span></div>
+        <div class="seg seg-block" id="slabSeg"></div></div>
       <div class="field" id="pccField"><div class="field-label"><span>Degree of composite action${help('Partial composite connection: ΣQn as a percent of the force for full composite action (AISC 360 I3). The solver sizes the studs to reach it. Paper studied 25, 50 and 75 %; above about 80 % the studs often cannot fit.')}</span><span class="hint" id="pccV"></span></div>
         <div class="row"><div class="seg seg-block" id="pccSeg" style="flex:1"><button data-v="25">25 %</button><button data-v="50">50 %</button><button data-v="75">75 %</button></div>
         <div class="num-box" title="Other value, 25–90 % in 5 % steps (outside the study)"><input type="number" id="pccN" min="25" max="90" step="5" aria-label="Other degree of composite action, percent"><span>%</span></div></div></div>
@@ -160,6 +167,11 @@ export function createDesigner(root, ctx) {
     }
     $$('#concSeg button', R).forEach(b => b.onclick = () => set({ conc: +b.dataset.v }));
     $$('#deckBtns button', R).forEach(b => b.onclick = () => set({ deck: +b.dataset.v }));
+    $$('#ninfAuto button', R).forEach(b => b.onclick = () => set({ ninf: null }));
+    const nset = (v) => set({ ninf: Math.max(1, Math.min(14, Math.round(v))) });
+    $('#ninfDn', R).onclick = () => nset((S.ninf || autoBeams()) - 1);
+    $('#ninfUp', R).onclick = () => nset((S.ninf || autoBeams()) + 1);
+    $('#ninfN', R).onchange = (e) => { const v = +e.target.value; if (Number.isFinite(v) && v >= 1) nset(v); else set({ ninf: null }); };
     $$('#pccSeg button', R).forEach(b => b.onclick = () => set({ pcc: +b.dataset.v }));
     $('#pccN', R).onchange = (e) => { let v = Math.round((+e.target.value || 50) / 5) * 5; v = Math.max(25, Math.min(90, v)); set({ pcc: v }); };
     $('#useSel', R).onchange = (e) => set({ use: +e.target.value });
@@ -185,6 +197,15 @@ export function createDesigner(root, ctx) {
     }
     $$('#concSeg button', R).forEach(b => b.classList.toggle('on', +b.dataset.v === S.conc));
     $$('#deckBtns button', R).forEach(b => b.classList.toggle('on', +b.dataset.v === S.deck));
+    const nb = S.ninf || autoBeams();
+    $$('#ninfAuto button', R).forEach(b => b.classList.toggle('on', !S.ninf));
+    $('#ninfN', R).value = nb;
+    $('#ninfV', R).textContent = `@ ${fmtFixed(S.g / (nb + 1), 2)} ft${S.ninf ? ' · set by you' : ''}`;
+    const opts = slabOptions();
+    if (S.slab && !opts.includes(S.slab)) S.slab = null;
+    $('#slabSeg', R).innerHTML = `<button data-v="auto" class="${S.slab ? '' : 'on'}">Auto</button>` + opts.map(t => `<button data-v="${t}" class="${S.slab === t ? 'on' : ''}">${t}"</button>`).join('');
+    $$('#slabSeg button', R).forEach(b => b.onclick = () => set({ slab: b.dataset.v === 'auto' ? null : +b.dataset.v }));
+    $('#slabV', R).textContent = S.slab ? `${fmtFixed(S.slab - S.deck, 2)}" above ribs · set by you` : 'lightest that works';
     $('#pccField', R).hidden = S.system !== 'composite';
     $$('#pccSeg button', R).forEach(b => b.classList.toggle('on', +b.dataset.v === S.pcc));
     $('#pccN', R).value = S.pcc;
@@ -254,6 +275,8 @@ export function createDesigner(root, ctx) {
     const q = new URLSearchParams({ sys: S.system === 'composite' ? 'c' : 'nc', g: S.g, i: S.i, c: S.conc, d: S.deck, p: S.pcc, u: S.use, cs: S.clear, fl: S.fl, fw: S.fw, m: S.mode === 'check' ? 'chk' : 'opt' });
     if (S.mode === 'check') { if (S.is) q.set('is', S.is); if (S.gs) q.set('gs', S.gs); }
     if (S.view && S.view !== 'best') q.set('st', S.view);
+    if (S.ninf) q.set('n', S.ninf);
+    if (S.slab) q.set('sl', S.slab);
     history.replaceState(null, '', `#/designer?${q}`);
   }
   function readHash(qs) {
@@ -273,14 +296,24 @@ export function createDesigner(root, ctx) {
     if (q.has('is')) S.is = q.get('is').toUpperCase();
     if (q.has('gs')) S.gs = q.get('gs').toUpperCase();
     S.view = q.get('st') || (S.mode === 'check' ? 'check' : 'best');
+    S.ninf = q.has('n') && +q.get('n') >= 1 ? Math.min(14, Math.round(+q.get('n'))) : null;
+    S.slab = q.has('sl') && +q.get('sl') > 0 ? +q.get('sl') : null;
   }
 
   // ------------------------------------------------------------------ solver
   const runSoon = debounce(() => run(), 650);
 
+  function autoBeams() {
+    const smax = window.__msveMeta?.systems?.[S.system]?.spacing_lookup?.[`${S.conc}|${S.deck}`] || 10;
+    return Math.max(1, Math.ceil(S.g / smax - 1));     // the solver's rule, for display only
+  }
+  function slabOptions() { return window.__msveMeta?.slab_options?.[`${S.conc}|${S.deck}`] || []; }
+
   function request() {
     const b = { system: S.system, girder_span: S.g, infill_span: S.i, conc_type: S.conc, deck_type: S.deck, percent_comp: S.pcc, building_use: S.use, clear_spans: S.clear, floor_length: S.fl, floor_width: S.fw, mode: S.mode };
     if (S.mode === 'check') { b.infill_shape = S.is; b.girder_shape = S.gs; }
+    if (S.ninf) b.num_infill = S.ninf;
+    if (S.slab) b.slab_total = S.slab;
     return b;
   }
 
@@ -336,7 +369,7 @@ export function createDesigner(root, ctx) {
 
   // ------------------------------------------------------------------ dataset (instant preview + validation)
   function onGrid() {
-    return S.use === 3 && S.clear === 3 && S.fl === 200 && S.fw === 200 && S.g >= 10 && S.g <= 50 && S.i >= 10 && S.i <= 50 &&
+    return !S.ninf && !S.slab && S.use === 3 && S.clear === 3 && S.fl === 200 && S.fw === 200 && S.g >= 10 && S.g <= 50 && S.i >= 10 && S.i <= 50 &&
       (S.system === 'noncomposite' || [25, 50, 75].includes(S.pcc));
   }
   async function getDs(sys) { if (!ds[sys]) ds[sys] = await loadDataset(sys); return ds[sys]; }
@@ -370,7 +403,8 @@ export function createDesigner(root, ctx) {
   function sameInputs(res) {
     const r = res.request || {};
     return r.system === S.system && r.girder_span === S.g && r.infill_span === S.i && r.conc_type === S.conc && +r.deck_type === S.deck &&
-      (S.system === 'noncomposite' || r.percent_comp === S.pcc) && r.building_use === S.use && r.clear_spans === S.clear;
+      (S.system === 'noncomposite' || r.percent_comp === S.pcc) && r.building_use === S.use && r.clear_spans === S.clear &&
+      (r.num_infill || null) === (S.ninf || null) && (r.slab_total || null) === (S.slab || null);
   }
 
   async function matchDataset(res) {
@@ -452,7 +486,7 @@ export function createDesigner(root, ctx) {
     if (!result) return;
     if (!result.ok) {
       out.innerHTML = `<div class="verdict"><h3>No design for these inputs</h3><p class="muted small" style="margin:8px 0 0">${esc(result.error || '')}</p>
-        <p class="small">The solver could not size a deck or members that pass every check. Try a shorter span, a deeper deck or less composite action.</p></div>`;
+        <p class="small">The solver could not size a deck or members that pass every check.${S.ninf || S.slab ? ' With your own beam count or slab depth, the deck table may have no deck that spans that far or carries that slab — try Auto, more beams or another depth.' : ' Try a shorter span, a deeper deck or less composite action.'}</p></div>`;
       return;
     }
     const key = sel();
@@ -475,6 +509,7 @@ export function createDesigner(root, ctx) {
       <div class="v-top"><div><div class="tiny muted">${res.system === 'composite' ? 'Composite' : 'Non-composite'} · ${S.mode === 'check' ? 'your members' : 'optimized by the paper\'s solver'}</div>
       <h3>${esc(STATE_SHORT[key])}${key === 'best' ? ' <span class="star">★</span>' : ''}</h3></div>
       ${pass ? '<span class="pill pass">✓ meets 0.5 %g</span>' : '<span class="pill fail">✗ exceeds limit</span>'}</div>
+      ${res.variant ? `<div class="warn-box" style="margin-top:8px"><b>Set by you</b> — ${esc(res.variant.note)}</div>` : ''}
       ${S.mode === 'optimize' ? `<div class="small" style="margin-top:6px;color:var(--text2)">Lowest-carbon fix chosen by the solver: <b style="color:${METHOD_COLORS[method]}">${esc(methodTxt)}</b></div>` : ''}
       ${S.mode === 'check' && key === 'check' ? (() => {
         const f = calcInfo[res.system] ? C.failingChecks(calcInfo[res.system], v) : { structural: [], filters: [] };
@@ -618,7 +653,7 @@ export function createDesigner(root, ctx) {
     const grp = (lab, items, cur, attr) => `<div class="vp-group"><span class="lab">${lab}</span>${items.map(([v, t, title]) => `<button data-${attr}="${v}" class="${(typeof cur === 'function' ? cur(v) : cur === v) ? 'on' : ''}" title="${esc(title || t)}">${t}</button>`).join('')}</div>`;
     tb.innerHTML =
       `<div class="vp-group side-toggle"><button id="sideBtn" class="${root.querySelector('.designer').classList.contains('show-side') ? 'on' : ''}" title="Show or hide the results panel">Results ◂</button></div>` +
-      grp('Floor', [['concrete', 'Concrete', 'Plain concrete'], ['mode', 'Mode shape', 'DG 11 combined mode φ(x, z) from Δj and Δg'], ['accel', 'Peak accel.', 'a_p × φ: DG 11 peak acceleration distributed by the mode shape, with the 0.5 %g contour'], ['defl', 'Deflection', 'DG 11 static deflection Δj + Δg shaped by φ']], bay.floorMode, 'floor') +
+      grp('Overlay', [['concrete', 'None', 'No colour overlay: see-through concrete'], ['mode', 'Mode shape', 'DG 11 combined mode φ(x, z) from Δj and Δg'], ['accel', 'Peak accel.', 'a_p × φ: DG 11 peak acceleration distributed by the mode shape, with the 0.5 %g contour'], ['defl', 'Deflection', 'DG 11 static deflection Δj + Δg shaped by φ']], bay.floorMode, 'floor') +
       grp('Motion', [['still', 'Still'], ['vibrate', 'Vibrate', 'Animate the floor at its frequency fn (slowed)'], ['walk', 'Walk test', 'A walker crosses the bay; footfalls ripple and the response builds']], bay.motion, 'motion') +
       grp('View', [['iso', '3D'], ['top', 'Plan'], ['section', 'Section', 'Cut through the slab, deck and girders'], ['under', 'Below', 'Underside: deck ribs and studs'], ['close', 'Close-up', 'Corner close-up of the connection and studs']], bay.view, 'view') +
       grp('Show', [['slab', 'Slab'], ['deck', 'Deck'], ['studs', 'Studs'], ['panels', 'Bj / Bg', 'DG 11 effective panel widths and the neighbouring bays'], ['xray', 'X-ray', 'See-through slab and deck'], ['labels', 'Labels'], ['dims', 'Dims'], ['columns', 'Columns']], (v) => L[v], 'layer');

@@ -341,7 +341,7 @@ export class Bay3D {
           float gl = 1.0 - smoothstep(0.0, fwidth(vB.x) * 1.2, min(0.5 - gq.x, 0.5 - gq.y));
           col = mix(col, col * 0.88, gl * 0.25);
           col *= lam;
-          if (uXray > 0.5) alpha = 0.22;
+          if (uXray > 0.5) alpha = uMode == 0 ? 0.22 : 0.72;
           gl_FragColor = vec4(col, alpha);
           #include <colorspace_fragment>
         }`,

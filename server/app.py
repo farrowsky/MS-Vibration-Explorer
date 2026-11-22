@@ -153,6 +153,8 @@ class DesignRequest(BaseModel):
     floor_length: float = Field(200, ge=LIMITS['floor_ft']['min'], le=LIMITS['floor_ft']['max'])
     floor_width: float = Field(200, ge=LIMITS['floor_ft']['min'], le=LIMITS['floor_ft']['max'])
     mode: str = Field('optimize', pattern='^(optimize|check)$')
+    num_infill: int | None = Field(None, ge=1, le=14)   # None = the solver decides (published method)
+    slab_total: float | None = Field(None, ge=3, le=9)  # total slab depth, in; None = lightest that works
     infill_shape: str | None = None
     girder_shape: str | None = None
 
@@ -170,6 +172,12 @@ def _warnings(req: DesignRequest) -> list[str]:
                    'DG 11 table but were not part of the published results.')
     if req.clear_spans != 3:
         out.append('The paper used deck continuous over 3 spans.')
+    if req.num_infill:
+        out.append(f'Interior infill count set to {req.num_infill} by the user: outside the paper\'s method, '
+                   'where the solver derives it from the deck table.')
+    if req.slab_total:
+        out.append(f'Total slab depth set to {req.slab_total:g} in by the user: outside the paper\'s method, '
+                   'where the solver picks the lightest deck and topping that work.')
     return out
 
 
@@ -217,7 +225,7 @@ def meta():
         info = e.source_info()
         systems[s] = {'provenance': e.provenance(), 'building_uses': info['building_uses'],
                       'spacing_lookup': info['spacing_lookup'], 'shapes': e.shapes}
-    return {'version': VERSION, 'limits': LIMITS, 'systems': systems,
+    return {'version': VERSION, 'limits': LIMITS, 'systems': systems, 'slab_options': eng.slab_options(),
             'states': eng.STATE_ORDER, 'state_labels': eng.STATE_LABELS,
             'methods': eng.METHOD_CODES, 'method_fold': eng.METHOD_FOLD,
             'known_quirks': [{'state': k[0], 'column': k[1], 'note': v}
@@ -265,7 +273,7 @@ def design(req: DesignRequest):
         _waiting += 1
     try:
         t0 = time.perf_counter()
-        e = eng.get_engine(req.system)
+        e = eng.get_engine(req.system, 'user' if (req.num_infill or req.slab_total) else None)
         out = e.design(req.model_dump(), mode=req.mode,
                        infill_shape=req.infill_shape, girder_shape=req.girder_shape)
         out['warnings'] = _warnings(req)

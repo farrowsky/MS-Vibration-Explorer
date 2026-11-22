@@ -136,3 +136,30 @@ def test_matches_published_csv(system):
             assert close(st['Embodied Carbon Scaled'] / eng.LB_TO_KG, row[f'{prefix} EC_Scaled'], 1e-9)
             assert str(row[f'{prefix} Infill Size']).startswith(st['Infill Sizes'])
         assert out['condition_class'] == int(row['Best Method old'])
+
+
+# ---------------------------------------------------------------------------
+# user overrides (beam count, slab depth): a separate copy of the solver
+def test_user_variant_is_published_solver_when_unset():
+    base = eng.get_engine('composite').design(BASE, capture=False)
+    user = eng.get_engine('composite', 'user').design(dict(BASE), capture=False)
+    for key in STATES:
+        a, b = base['states'][key], user['states'][key]
+        assert a['_applies'] == b['_applies']
+        if a['_applies']:
+            assert a['Infill Sizes'] == b['Infill Sizes'] and a['Girder Sizes'] == b['Girder Sizes']
+            assert a['Peak Acceleration'] == b['Peak Acceleration']
+            assert a['Embodied Carbon Scaled'] == b['Embodied Carbon Scaled']
+
+
+@pytest.mark.parametrize('system', ['composite', 'noncomposite'])
+def test_user_overrides_apply_and_validate(system):
+    e = eng.get_engine(system, 'user')
+    out = e.design(dict(BASE, num_infill=3, slab_total=6.5))
+    assert out['ok'] and out['variant']['infill_count'] == 3 and out['variant']['slab_total'] == 6.5
+    v = out['captured']['initial']['values']
+    assert v['NumInfill'] == 3 and v['selected_deck_slab_thickness'] == 6.5
+    for cap in out['captured'].values():
+        assert cap['recheck']['n_bad'] == 0
+        if 'validation' in cap:
+            assert cap['validation']['all_ok']

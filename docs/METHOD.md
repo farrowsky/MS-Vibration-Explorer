@@ -42,3 +42,17 @@ Two values on screen are computed in the browser, and each is checked against th
 infill, but `expand_girder` lays it along the girder axis, so the reported label belongs to the shape at the girder's
 index. Only this descriptive label is affected. The tool shows the captured value, marks the column as a known quirk,
 and leaves the published code unchanged.
+
+## User overrides (outside the paper's method)
+
+The Bay Designer can set two things the published solver normally decides: the number of interior beams
+(`num_infill_override`) and the total slab depth (`slab_total_override`, one of the depths the deck table offers).
+They are applied to a *separate copy* of the solver cell by one-line replacements, the technique the paper's
+damping study used for its damping override, so line numbers are unchanged:
+
+* `NumInfill = max(1, ms.ceil(NumInfill_unrounded))` gains `... if num_infill_override is None else int(num_infill_override)`;
+* `Deck_Check = ...` gains `& (Total_Depth == slab_total_override)` when a depth is set.
+
+With both left at Auto the tool runs the published notebook itself, never the copy. `tests/test_engine.py` checks
+that the copy reproduces the published solver when nothing is set. Results with an override carry a "Set by you"
+note, and are not compared with the published dataset.

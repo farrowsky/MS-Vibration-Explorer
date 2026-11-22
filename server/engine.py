@@ -99,6 +99,33 @@ KNOWN_REPORTING_QUIRKS = {
         "capacity on the same row uses expand_infill and validates."),
 }
 
+# Optional, user-requested deviations from the published method, applied to a separate copy of the
+# solver cell by one-line replacements (the technique the paper's damping study used for its damping
+# override; line numbers are unchanged). With an argument left at None the copy computes exactly what
+# the published solver computes; the default (Auto) path never uses the copy at all.
+#   num_infill_override  -- number of interior infills, instead of deriving it from the deck table
+#   slab_total_override  -- total slab depth (in): the deck table is filtered to rows of that depth
+#                           before the solver picks the lightest deck that passes its checks
+VARIANT_PATCHES = {
+    'user': [
+        ('floor_width, ):', 'floor_width, num_infill_override=None, slab_total_override=None, ):'),
+        ('        NumInfill = max(1, ms.ceil(NumInfill_unrounded))\n',
+         '        NumInfill = max(1, ms.ceil(NumInfill_unrounded)) if num_infill_override is None else int(num_infill_override)\n'),
+        ('        Deck_Check = Conc_Type_Check & Deck_Type_Check & Span_Check & Load_Check\n',
+         '        Deck_Check = (Conc_Type_Check & Deck_Type_Check & Span_Check & Load_Check) if slab_total_override is None '
+         'else (Conc_Type_Check & Deck_Type_Check & Span_Check & Load_Check & (Total_Depth == float(slab_total_override)))\n'),
+    ],
+}
+
+
+def slab_options() -> dict:
+    """Total slab depths the deck table offers, keyed 'conc|deck' (conc 0 = NW, 1 = LW)."""
+    d = pd.read_csv(os.path.join(PAPER_DIR, TABLES[1]))
+    out = {}
+    for (deck, conc), g in d.groupby(['Deck Type', 'Conc Type']):
+        out[f"{0 if conc == 'NW' else 1}|{float(deck):g}"] = sorted(float(x) for x in set(g['Total']))
+    return out
+
 # Module-level constants of the solver cell, captured alongside the locals.
 GLOBAL_CONSTANTS = ('Es', 'Fy', 'f_prime_c', 'LB_TO_KG')
 
@@ -389,17 +416,23 @@ def _monitoring_tool_id() -> int:
 
 
 class PaperEngine:
-    def __init__(self, system: str):
+    def __init__(self, system: str, variant: str | None = None):
         if system not in NOTEBOOKS:
             raise ValueError(system)
         self.system = system
+        self.variant = variant
         self.composite = system == 'composite'
         self.notebook_path = os.path.join(PAPER_DIR, NOTEBOOKS[system])
         self.notebook_sha256 = sha256_file(self.notebook_path)
         cells = _solver_cells(self.notebook_path)
         self.source = cells[-1]
         self.prelude = '\n'.join(cells[:-1])
-        self.source_sha256 = sha256_text(self.source)
+        self.source_sha256 = sha256_text(self.source)        # hash of the PUBLISHED cell
+        if variant:
+            for a, b in VARIANT_PATCHES[variant]:
+                assert self.source.count(a) == 1, (variant, a)
+                self.source = self.source.replace(a, b)
+            assert self.source.count('\n') == cells[-1].count('\n')   # line numbers unchanged
 
         ns: dict = {'__name__': f'paper_{system}', '__file__': self.notebook_path}
         with warnings.catch_warnings():
@@ -432,6 +465,9 @@ class PaperEngine:
             kw['Deck_Type'] = int(kw['Deck_Type'])    # the notebooks use 2 and 3 as ints in their lookups
         if self.composite:
             kw['percent_comp'] = int(p['percent_comp'])
+        if self.variant == 'user':
+            kw['num_infill_override'] = int(p['num_infill']) if p.get('num_infill') else None
+            kw['slab_total_override'] = float(p['slab_total']) if p.get('slab_total') else None
         return kw
 
     def _call(self, kw: dict):
@@ -696,6 +732,15 @@ class PaperEngine:
             'captured': captured,
             'timing_s': {'solve': round(t1 - t0, 3), 'capture': round(t2 - t1, 3)},
             'engine': self.provenance(),
+            'variant': (None if not self.variant else {
+                'name': self.variant,
+                'infill_count': kw.get('num_infill_override'),
+                'slab_total': kw.get('slab_total_override'),
+                'note': 'Set by the user instead of by the solver: '
+                        + ', '.join(x for x in [f"{kw.get('num_infill_override')} interior infills" if kw.get('num_infill_override') else '',
+                                                f"{kw.get('slab_total_override'):g} in total slab depth" if kw.get('slab_total_override') else ''] if x)
+                        + '. Uses a copy of the published solver with one-line overrides (identical to it when not set); '
+                          'outside the method of the paper.'}),
         }
         return out
 
@@ -730,8 +775,9 @@ _ENGINES: dict = {}
 _LOAD_LOCK = threading.Lock()
 
 
-def get_engine(system: str) -> PaperEngine:
+def get_engine(system: str, variant: str | None = None) -> PaperEngine:
     with _LOAD_LOCK:
-        if system not in _ENGINES:
-            _ENGINES[system] = PaperEngine(system)
-        return _ENGINES[system]
+        key = (system, variant)
+        if key not in _ENGINES:
+            _ENGINES[key] = PaperEngine(system, variant)
+        return _ENGINES[key]
