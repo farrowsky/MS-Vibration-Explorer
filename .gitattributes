@@ -1,0 +1,8 @@
+* text=auto eol=lf
+*.bat text eol=crlf
+*.bin binary
+*.webp binary
+*.png binary
+*.ipynb text eol=lf -diff
+engine/paper/*.csv -text
+engine/paper/*.ipynb -text
