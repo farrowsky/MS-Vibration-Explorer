@@ -1,0 +1,144 @@
+{
+ "source": "Figures 1-15 of the manuscript",
+ "figures": [
+  {
+   "num": 1,
+   "caption": "Geometric variables used in the parametric study",
+   "kind": "method",
+   "aspect": 1.5955,
+   "full": "assets/figures/figure_1_full.webp",
+   "thumb": "assets/figures/figure_1_thumb.webp",
+   "source_sha256": "79bdae26b149d0bcf91681ba3d87741a5566210fae3f99c400f52496ccaafb66"
+  },
+  {
+   "num": 2,
+   "caption": "Flowchart of deck and slab sizing",
+   "kind": "method",
+   "svg": "assets/figures/figure_2.svg",
+   "aspect": 1.8782,
+   "full": "assets/figures/figure_2_full.webp",
+   "thumb": "assets/figures/figure_2_thumb.webp",
+   "source_sha256": "3895fa3720831d8bc5af4b7636e2e06d889f9efbb43d70800c9793376ee91af3"
+  },
+  {
+   "num": 3,
+   "caption": "Flowchart of steel member sizing",
+   "kind": "method",
+   "svg": "assets/figures/figure_3.svg",
+   "aspect": 1.3639,
+   "full": "assets/figures/figure_3_full.webp",
+   "thumb": "assets/figures/figure_3_thumb.webp",
+   "source_sha256": "9cebb02182351862235aaca38c3bd48e3285a01bf0402f4415afb3fa631766ad"
+  },
+  {
+   "num": 4,
+   "caption": "Flowchart of vibration model",
+   "kind": "method",
+   "svg": "assets/figures/figure_4.svg",
+   "aspect": 1.8254,
+   "full": "assets/figures/figure_4_full.webp",
+   "thumb": "assets/figures/figure_4_thumb.webp",
+   "source_sha256": "95b0508e16b5f9f871a33430a12b26a579f275a9b1be218315be7eef3011c91b"
+  },
+  {
+   "num": 5,
+   "caption": "Flowchart of vibration mitigation process",
+   "kind": "method",
+   "svg": "assets/figures/figure_5.svg",
+   "aspect": 1.3842,
+   "full": "assets/figures/figure_5_full.webp",
+   "thumb": "assets/figures/figure_5_thumb.webp",
+   "source_sha256": "243cd293affa7fdc7bb2dd8a216df6db2a9bf1b342731774b45717cc4f6544b8"
+  },
+  {
+   "num": 6,
+   "caption": "Bay area, girder span, and infill span vs initial peak acceleration and initial scaled embodied carbon of sampled residential composite designs with linear piecewise average",
+   "kind": "results",
+   "aspect": 0.7739,
+   "full": "assets/figures/figure_6_full.webp",
+   "thumb": "assets/figures/figure_6_thumb.webp",
+   "source_sha256": "e454be2af9e08a8516af15b45afd96b21dfd95ab9479d4b0dd71d7d63934f25f"
+  },
+  {
+   "num": 7,
+   "caption": "Girder span vs infill span colored by average initial peak acceleration over the 0.5%g tolerance limit and average initial scaled embodied carbon of sampled residential composite designs",
+   "kind": "results",
+   "aspect": 2.0756,
+   "full": "assets/figures/figure_7_full.webp",
+   "thumb": "assets/figures/figure_7_thumb.webp",
+   "source_sha256": "42ca3d22e0b09160babfd7d292da8bc2b569f740301be4b3501f24019944e07c"
+  },
+  {
+   "num": 8,
+   "caption": "Peak acceleration vs fundamental frequency of sampled residential composite designs colored by bay area",
+   "kind": "results",
+   "aspect": 0.955,
+   "full": "assets/figures/figure_8_full.webp",
+   "thumb": "assets/figures/figure_8_thumb.webp",
+   "source_sha256": "e1a2a3a6c8aa3881feb76a3a2878eaf3c08f9547fef9e0351e5d8377dedf12c2"
+  },
+  {
+   "num": 9,
+   "caption": "Bay area vs initial peak acceleration and initial scaled embodied carbon of sampled residential composite designs colored by deck depth with linear piecewise averages",
+   "kind": "results",
+   "aspect": 2.0222,
+   "full": "assets/figures/figure_9_full.webp",
+   "thumb": "assets/figures/figure_9_thumb.webp",
+   "source_sha256": "83fd950d22df38feb52844c2d1d4100d4c10cb26883c3389302f9a9a9c3759d1"
+  },
+  {
+   "num": 10,
+   "caption": "Bay area vs initial peak acceleration and scaled embodied carbon of sampled residential composite and non-composite designs colored by PCC with linear piecewise average",
+   "kind": "results",
+   "aspect": 2.0316,
+   "full": "assets/figures/figure_10_full.webp",
+   "thumb": "assets/figures/figure_10_thumb.webp",
+   "source_sha256": "26a8fa3ef309e544dcc43a3ed62b5f1d8d10981999c54e5920318754606aa4f6"
+  },
+  {
+   "num": 11,
+   "caption": "Infill span vs girder span colored by the most efficient mitigation method averaged across sampled residential composite and non-composite designs",
+   "kind": "results",
+   "aspect": 1.0303,
+   "full": "assets/figures/figure_11_full.webp",
+   "thumb": "assets/figures/figure_11_thumb.webp",
+   "source_sha256": "3304b7681aea79494e1f7bf962a466fa8678c6c9f9caede62db762daffba05e9"
+  },
+  {
+   "num": 12,
+   "caption": "Girder span vs infill span colored by average scaled embodied carbon for initial composite designs and controlling mitigated designs",
+   "kind": "results",
+   "aspect": 2.0084,
+   "full": "assets/figures/figure_12_full.webp",
+   "thumb": "assets/figures/figure_12_thumb.webp",
+   "source_sha256": "b9f41a00af6e9249087891f634b014891ad2a0f06f63cdf10287351676f0ebb9"
+  },
+  {
+   "num": 13,
+   "caption": "Girder span vs infill span colored by scaled embodied carbon for initial non-composite designs and controlling mitigated designs",
+   "kind": "results",
+   "aspect": 2.0084,
+   "full": "assets/figures/figure_13_full.webp",
+   "thumb": "assets/figures/figure_13_thumb.webp",
+   "source_sha256": "fdf3cc19623abd58a7d990414723844d057a44c013e43ac64d5a95931d3de777"
+  },
+  {
+   "num": 14,
+   "caption": "Summary of initial and mitigated scaled embodied carbon values of sampled composite designs for different regions of the design space",
+   "kind": "results",
+   "aspect": 1.4765,
+   "full": "assets/figures/figure_14_full.webp",
+   "thumb": "assets/figures/figure_14_thumb.webp",
+   "source_sha256": "0771455eb5ffe893602d8df2a2964cc87125e836536375adaf5818a17942b374"
+  },
+  {
+   "num": 15,
+   "caption": "Damping ratio sensitivity study from 1% to 5% for sampled composite and non-composite designs, showing (a) median initial peak acceleration, (b) share of designs meeting the 0.5%g tolerance limit without mitigation, (c) controlling mitigation method, and (d) mean controlling scaled embodied carbon",
+   "kind": "results",
+   "aspect": 1.2683,
+   "full": "assets/figures/figure_15_full.webp",
+   "thumb": "assets/figures/figure_15_thumb.webp",
+   "source_sha256": "e8c4995ea06c40f79101b8a78c13552868b62fc9886f5f0939b3da7d3b5a4a28"
+  }
+ ]
+}

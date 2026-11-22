@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MS Vibration Explorer</title>
+<meta name="description" content="Interactive companion to 'Carbon-Efficient Design Strategies for Mitigating Footfall Vibration in Steel Framed Floor Systems': design a steel floor bay with the paper's own solver and explore the published design space.">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/app.css">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js", "three/addons/": "./vendor/" } }
+</script>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <a class="brand" href="#/designer" aria-label="MS Vibration Explorer home">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-text"><b>MS Vibration</b> Explorer</span>
+    </a>
+    <nav class="tabs" aria-label="Modules">
+      <a href="#/designer" data-route="designer"><span class="tab-num">1</span>Bay Designer</a>
+      <a href="#/explore" data-route="explore"><span class="tab-num">2</span>Design Space</a>
+      <a href="#/about" data-route="about">About &amp; Method</a>
+    </nav>
+    <div class="top-actions">
+      <div class="seg seg-sm" role="group" aria-label="Units">
+        <button data-units="imperial" class="on" title="Imperial units">ft&middot;in</button>
+        <button data-units="si" title="SI units">SI</button>
+      </div>
+      <button class="icon-btn" id="themeBtn" title="Toggle light / dark" aria-label="Toggle light or dark theme">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="research-banner" role="note">
+    <b>Research showcase, not a design tool.</b> Results come from the solver published with the paper and are for exploring
+    the study only. They are not engineering advice and must not be used to design, check or approve any structure.
+    <a href="#/about" data-scroll="disclaimer">Full disclaimer</a>
+  </div>
+
+  <main id="views">
+    <section id="view-designer" class="view" data-view="designer"></section>
+    <section id="view-explore" class="view" data-view="explore" hidden></section>
+    <section id="view-about" class="view" data-view="about" hidden></section>
+  </main>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<dialog id="disclaimerDlg" class="dlg">
+  <form method="dialog" class="dlg-body">
+    <h2>Before you start</h2>
+    <p>This tool accompanies the paper <i>Carbon-Efficient Design Strategies for Mitigating Footfall Vibration in Steel
+      Framed Floor Systems</i> (Farrow, Brown and Solnosky). It runs the code published with the paper so readers can
+      see how the study's designs were produced and explore its results.</p>
+    <ul class="disc-list">
+      <li><b>Not for design.</b> Output is research data. It is not a structural design, check, specification or
+        professional advice, and it is not a substitute for a licensed engineer's own analysis.</li>
+      <li><b>Study assumptions apply.</b> The model covers one interior bay with the simplifications described in the
+        paper (loads, deck tables, member selection rules, AISC Design Guide 11 walking-vibration method). Many real
+        conditions are not considered.</li>
+      <li><b>No warranty, no liability.</b> Provided "as is" under the MIT License. The authors, their institution and
+        contributors accept no responsibility for any use of the results.</li>
+      <li><b>Third-party data.</b> Steel shapes and deck values are the study's modified tables, not the official
+        publications. Check current AISC and manufacturer data for real work.</li>
+    </ul>
+    <label class="chk"><input type="checkbox" id="discAgree"> I understand this is a research showcase and will not
+      use its output for design.</label>
+    <div class="dlg-actions">
+      <button class="btn btn-primary" id="discOk" value="ok" disabled>Continue to the tool</button>
+    </div>
+  </form>
+</dialog>
+
+<noscript><p style="padding:2rem">This tool needs JavaScript (and WebGL for the 3D views).</p></noscript>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
