@@ -24,10 +24,13 @@ It runs **the paper's own solver**, the code published in
 
 Requires **Python 3.12 or newer** (the calculation capture uses `sys.monitoring`, added in 3.12). Developed on Python 3.13.
 
-**Windows:** double-click `run.bat`.
-**macOS / Linux:** `./run.sh`
+**Windows:** double-click **`MS Vibration Explorer.bat`**. It finds Python 3.12+ (including Anaconda), installs the four
+dependencies on first run if they are missing, starts the solver service in the background and opens the tool in its own
+app window. Closing the window stops the service.
+**macOS / Linux:** `./run.sh` (opens <http://localhost:8000> in the browser).
 
-Both install the four dependencies (`requirements.txt`), start the server and open <http://localhost:8000>.
+Opening `web/index.html` directly from disk does not work (browsers block the app's modules on `file://`); the page then
+points you to the launcher.
 
 By hand:
 

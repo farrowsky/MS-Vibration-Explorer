@@ -51,6 +51,7 @@ export function createExplorer(root, ctx) {
       <div class="x-head">
         <div class="seg" id="xView"><button data-v="heat">Heatmap</button><button data-v="land">3D landscape</button><button data-v="scatter">Scatter</button><button data-v="figs">Paper figures</button></div>
         <h3 id="xTitle" style="margin-left:6px"></h3><span class="spacer"></span><span class="small muted" id="xCount"></span>
+        <button class="btn btn-sm side-toggle" id="xSide" title="Show or hide the details panel">Details ◂</button>
       </div>
       <div class="x-stage" id="xStage"></div>
       <div class="x-foot" id="xFoot"></div>
@@ -395,6 +396,7 @@ export function createExplorer(root, ctx) {
   // ---------------------------------------------------------------- selection panel
   function renderSelection(d) {
     const out = $('#xOut', root);
+    if (sel && window.innerWidth <= 1100) root.querySelector('.explore').classList.add('show-side');
     if (F.view === 'figs') { out.innerHTML = '<div class="small muted" style="padding:6px">Pick a figure to enlarge it.</div>'; return; }
     if (!sel) {
       out.innerHTML = `<div class="card"><div class="card-h">The published design space</div><div class="card-b small">
@@ -531,6 +533,7 @@ export function createExplorer(root, ctx) {
 
   // ---------------------------------------------------------------- wiring
   $$('#xView button', root).forEach(b => b.onclick = () => { F.view = b.dataset.v; save(); renderAll(); });
+  $('#xSide', root).onclick = () => root.querySelector('.explore').classList.toggle('show-side');
   const onResize = debounce(() => { if (!root.closest('[hidden]') && F.view !== 'figs' && F.view !== 'land') renderStage(); }, 200);
   window.addEventListener('resize', onResize);
   onUnits(() => { if (!root.closest('[hidden]')) renderStage(); });

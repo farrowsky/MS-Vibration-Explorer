@@ -617,10 +617,12 @@ export function createDesigner(root, ctx) {
     const L = bay.layers;
     const grp = (lab, items, cur, attr) => `<div class="vp-group"><span class="lab">${lab}</span>${items.map(([v, t, title]) => `<button data-${attr}="${v}" class="${(typeof cur === 'function' ? cur(v) : cur === v) ? 'on' : ''}" title="${esc(title || t)}">${t}</button>`).join('')}</div>`;
     tb.innerHTML =
+      `<div class="vp-group side-toggle"><button id="sideBtn" class="${root.querySelector('.designer').classList.contains('show-side') ? 'on' : ''}" title="Show or hide the results panel">Results ◂</button></div>` +
       grp('Floor', [['concrete', 'Concrete', 'Plain concrete'], ['mode', 'Mode shape', 'DG 11 combined mode φ(x, z) from Δj and Δg'], ['accel', 'Peak accel.', 'a_p × φ: DG 11 peak acceleration distributed by the mode shape, with the 0.5 %g contour'], ['defl', 'Deflection', 'DG 11 static deflection Δj + Δg shaped by φ']], bay.floorMode, 'floor') +
       grp('Motion', [['still', 'Still'], ['vibrate', 'Vibrate', 'Animate the floor at its frequency fn (slowed)'], ['walk', 'Walk test', 'A walker crosses the bay; footfalls ripple and the response builds']], bay.motion, 'motion') +
       grp('View', [['iso', '3D'], ['top', 'Plan'], ['section', 'Section', 'Cut through the slab, deck and girders'], ['under', 'Below', 'Underside: deck ribs and studs'], ['close', 'Close-up', 'Corner close-up of the connection and studs']], bay.view, 'view') +
       grp('Show', [['slab', 'Slab'], ['deck', 'Deck'], ['studs', 'Studs'], ['panels', 'Bj / Bg', 'DG 11 effective panel widths and the neighbouring bays'], ['xray', 'X-ray', 'See-through slab and deck'], ['labels', 'Labels'], ['dims', 'Dims'], ['columns', 'Columns']], (v) => L[v], 'layer');
+    $('#sideBtn', tb).onclick = () => { root.querySelector('.designer').classList.toggle('show-side'); renderTools(); };
     $$('[data-floor]', tb).forEach(b => b.onclick = () => { bay.setFloorMode(b.dataset.floor); renderTools(); renderHud(); });
     $$('[data-motion]', tb).forEach(b => b.onclick = () => { bay.setMotion(b.dataset.motion); walk = null; renderTools(); renderHud(); });
     $$('[data-view]', tb).forEach(b => b.onclick = () => { bay.setView(b.dataset.view); renderTools(); });
