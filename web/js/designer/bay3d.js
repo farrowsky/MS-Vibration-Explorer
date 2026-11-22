@@ -136,8 +136,10 @@ export class Bay3D {
     this.el = container;
     this.opts = opts;
     this.U = makeUniforms();
-    this.layers = { slab: true, deck: true, studs: true, labels: true, panels: false, columns: true, dims: true, xray: false };
-    this.floorMode = 'mode';     // concrete | mode | accel | defl
+    // default: see-through slab so the steel, deck and studs read first. For an interior DG 11 bay the
+    // mode-shape overlay always peaks at mid-bay, so it is offered as an option, not the default.
+    this.layers = { slab: true, deck: true, studs: true, labels: true, panels: false, columns: true, dims: true, xray: true };
+    this.floorMode = 'concrete'; // concrete | mode | accel | defl
     this.motion = 'still';       // still | vibrate | walk
     this.exag = 14;
     this.slow = 0.18;
