@@ -56,6 +56,7 @@ function inputsTable(res) {
   if (res.system === 'composite') rows.push(['Partial composite connection', `${i.percent_comp} %`]);
   rows.push(['Occupancy (solver table)', `${esc(bu[0] || i.Building_Use_num)} — LL ${bu[3]} psf, vibration LL ${bu[1]} psf, β = ${bu[4]}, a<sub>0</sub>/g = ${bu[2]} %g`]);
   rows.push(['Floor plate for DG 11 width limits', `${i.floor_length} × ${i.floor_width} ft`]);
+  if (res.variant) rows.push(['<b>Set by the user</b>', `${esc(res.variant.note)}${res.variant.member && Object.keys(res.variant.member).length ? ' Camber and stud values apply to the checked pair only; the optimizer states use the solver\'s own values.' : ''}`]);
   return `<table>${rows.map(([a, b]) => `<tr><td style="width:36%" class="muted">${a}</td><td>${b}</td></tr>`).join('')}</table>`;
 }
 

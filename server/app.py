@@ -157,6 +157,25 @@ class DesignRequest(BaseModel):
     slab_total: float | None = Field(None, ge=3, le=9)  # total slab depth, in; None = lightest that works
     infill_shape: str | None = None
     girder_shape: str | None = None
+    # member check only (composite): None = as the solver sets them
+    camber_infill: float | None = Field(None, ge=0, le=6)    # in
+    camber_girder: float | None = Field(None, ge=0, le=6)    # in
+    studs_infill: int | None = Field(None, ge=0, le=400)     # studs on one infill
+    studs_girder: int | None = Field(None, ge=0, le=400)     # studs on one girder
+
+
+MEMBER_FIELDS = ('camber_infill', 'camber_girder', 'studs_infill', 'studs_girder')
+
+
+def _normalize(req: DesignRequest) -> DesignRequest:
+    """Member overrides belong to the composite member check; drop them anywhere else."""
+    if req.mode != 'check' or req.system != 'composite':
+        req = req.model_copy(update={k: None for k in MEMBER_FIELDS})
+    return req
+
+
+def _uses_variant(req: DesignRequest) -> bool:
+    return bool(req.num_infill or req.slab_total) or any(getattr(req, k) is not None for k in MEMBER_FIELDS)
 
 
 def _warnings(req: DesignRequest) -> list[str]:
@@ -178,6 +197,11 @@ def _warnings(req: DesignRequest) -> list[str]:
     if req.slab_total:
         out.append(f'Total slab depth set to {req.slab_total:g} in by the user: outside the paper\'s method, '
                    'where the solver picks the lightest deck and topping that work.')
+    for k, what, unit in (('camber_infill', 'Infill camber', ' in'), ('camber_girder', 'Girder camber', ' in'),
+                          ('studs_infill', 'Studs per infill', ''), ('studs_girder', 'Studs per girder', '')):
+        v = getattr(req, k)
+        if v is not None:
+            out.append(f'{what} set to {v:g}{unit} by the user, instead of the value the solver computes.')
     return out
 
 
@@ -252,9 +276,42 @@ def get_source(system: str):
             'notebook_sha256': e.notebook_sha256, 'source': e.source}
 
 
+def _member_check(req: DesignRequest) -> dict:
+    """Member check with the user's camber or studs. The optimizer's states come from the run
+    without them (usually already cached); only the checked pair is captured with them."""
+    base_req = req.model_copy(update={k: None for k in MEMBER_FIELDS})
+    bkey = _cache_key(base_req)
+    hit = CACHE.get(bkey)
+    if hit is not None:
+        out = json.loads(hit)
+    else:
+        e = eng.get_engine(base_req.system, 'user' if _uses_variant(base_req) else None)
+        out = e.design(base_req.model_dump(), mode='check',
+                       infill_shape=base_req.infill_shape, girder_shape=base_req.girder_shape)
+        if out.get('ok'):
+            out['warnings'] = _warnings(base_req)
+            out['request'] = base_req.model_dump()
+            out['generated_utc'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+            out['tool_version'] = VERSION
+            blob = _dumps(out)
+            CACHE.put(bkey, blob)
+            out = json.loads(blob)
+    if not out.get('ok'):
+        return out
+    chk = eng.get_engine(req.system, 'user').check_pair(req.model_dump(), req.infill_shape, req.girder_shape)
+    if not chk['ok']:
+        return {'ok': False, 'error': 'The solver did not evaluate this pair with these values.', 'inputs': chk['inputs']}
+    out['captured']['check'] = chk['captured']['check']
+    out['variant'] = chk['variant']
+    out['inputs'] = chk['inputs']
+    out['timing_s'] = {**out.get('timing_s', {}), 'capture': chk['timing_s']}
+    return out
+
+
 @app.post('/api/design')
 def design(req: DesignRequest):
     global _waiting
+    req = _normalize(req)
     if req.deck_type not in LIMITS['deck_type']:
         raise HTTPException(422, 'deck_type must be 1.5, 2 or 3')
     if req.mode == 'check':
@@ -273,9 +330,12 @@ def design(req: DesignRequest):
         _waiting += 1
     try:
         t0 = time.perf_counter()
-        e = eng.get_engine(req.system, 'user' if (req.num_infill or req.slab_total) else None)
-        out = e.design(req.model_dump(), mode=req.mode,
-                       infill_shape=req.infill_shape, girder_shape=req.girder_shape)
+        if any(getattr(req, k) is not None for k in MEMBER_FIELDS):
+            out = _member_check(req)
+        else:
+            e = eng.get_engine(req.system, 'user' if _uses_variant(req) else None)
+            out = e.design(req.model_dump(), mode=req.mode,
+                           infill_shape=req.infill_shape, girder_shape=req.girder_shape)
         out['warnings'] = _warnings(req)
         out['request'] = req.model_dump()
         out['timing_s']['total'] = round(time.perf_counter() - t0, 3)

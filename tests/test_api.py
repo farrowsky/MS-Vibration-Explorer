@@ -40,3 +40,20 @@ def test_static_front_end():
     r = client.get('/')
     assert r.status_code == 200 and 'MS Vibration Explorer' in r.text
     assert client.get('/js/main.js').status_code == 200
+
+
+def test_member_check_overrides():
+    body = dict(system='composite', girder_span=30, infill_span=30, conc_type=0, deck_type=3, percent_comp=50,
+                building_use=3, clear_spans=3, floor_length=200, floor_width=200, mode='check',
+                infill_shape='W16X26', girder_shape='W24X55')
+    base = client.post('/api/design', json=body).json()
+    out = client.post('/api/design', json=dict(body, camber_infill=0, studs_girder=30)).json()
+    assert out['ok'] and out['variant']['member'] == {'camber_II_override': 0.0, 'studs_IG_override': 30}
+    v = out['captured']['check']['values']
+    assert v['camber_II'] == 0 and v['min_req_studs_IG'] == 30
+    # the optimizer's states are the solver's own, not recomputed with the user's values
+    assert out['states'] == base['states']
+    assert out['captured']['best']['values']['EC'] == base['captured']['best']['values']['EC']
+    # outside the member check the overrides are ignored
+    opt = client.post('/api/design', json=dict(body, mode='optimize', camber_infill=0)).json()
+    assert opt['variant'] is None and opt['request']['camber_infill'] is None

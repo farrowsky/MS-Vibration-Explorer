@@ -53,6 +53,18 @@ damping study used for its damping override, so line numbers are unchanged:
 * `NumInfill = max(1, ms.ceil(NumInfill_unrounded))` gains `... if num_infill_override is None else int(num_infill_override)`;
 * `Deck_Check = ...` gains `& (Total_Depth == slab_total_override)` when a depth is set.
 
-With both left at Auto the tool runs the published notebook itself, never the copy. `tests/test_engine.py` checks
+In the composite **member check** the user can also set the camber and the number of studs on the checked infill and
+girder (blank = the solver's value). The same copy gains, again one line each:
+
+* `camber_II` / `camber_IG` take the user's camber instead of 0.8 × the construction deflection;
+* `req_studs_*` holds the user's stud count at the fewest studs per rib the solver's rib rule allows
+  (half the studs strictly fewer than the half-span's ribs × studs per rib);
+* `Sigma_Qn_*` (partial-composite branch) becomes half the studs × Q<sub>n</sub> for that studs-per-rib, capped at V';
+* `PCC_check_*` requires the studs to fit and to give at least 25 % composite action.
+
+Only the checked pair is captured with these values. The optimizer's states on the same page come from the run
+without them, because the copy applies an override to every shape.
+
+With every override left at Auto the tool runs the published notebook itself, never the copy. `tests/test_engine.py` checks
 that the copy reproduces the published solver when nothing is set. Results with an override carry a "Set by you"
 note, and are not compared with the published dataset.

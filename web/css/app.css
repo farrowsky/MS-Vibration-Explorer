@@ -142,6 +142,16 @@ main { flex: 1; min-height: 0; }
 .num-box:focus-within { border-color: var(--accent); }
 .sub-unit { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
 .field.warn .num-box { border-color: var(--warn); }
+.ovr { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ovr th { font-weight: 600; color: var(--muted); text-align: left; padding: 0 0 4px; font-size: 11.5px; }
+.ovr td { padding: 2px 0; }
+.ovr td:first-child { color: var(--text2); padding-right: 8px; white-space: nowrap; }
+.ovr td + td { padding-left: 6px; }
+.ovr .num-box input { width: 100%; min-width: 0; }
+.ovr .num-box input::placeholder { color: var(--muted); opacity: .9; }
+.ovr .num-box.set { border-color: var(--warn); }
+.link-btn { background: none; border: 0; padding: 0; color: var(--accent); font-size: 11.5px; font-weight: 600; cursor: pointer; }
+.link-btn:disabled { color: var(--muted); cursor: default; }
 
 input[type=range] { -webkit-appearance: none; appearance: none; height: 6px; border-radius: 3px; background: var(--line); outline: none; }
 input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--text); border: 3px solid var(--accent); cursor: pointer; }

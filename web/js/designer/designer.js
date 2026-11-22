@@ -13,7 +13,11 @@ const STATE_SHORT = { initial: 'Initial design', infill: 'Upsize infills', girde
 const STATE_KEYS = ['initial', 'infill', 'girder', 'conc', 'steel', 'best'];
 const STATE_COLOR = { initial: '#8b98a5', infill: '#85C1E9', girder: '#FCAE2E', conc: '#E57373', steel: '#4178BE', best: '#A3B376', check: '#ffffff' };
 
-const DEFAULTS = { system: 'composite', mode: 'optimize', g: 30, i: 30, ninf: null, slab: null, conc: 0, deck: 3, pcc: 50, use: 3, clear: 3, fl: 200, fw: 200, is: null, gs: null, view: 'best' };
+const DEFAULTS = { system: 'composite', mode: 'optimize', g: 30, i: 30, ninf: null, slab: null, conc: 0, deck: 3, pcc: 50, use: 3, clear: 3, fl: 200, fw: 200, is: null, gs: null, ci: null, cg: null, si: null, sg: null, view: 'best' };
+// member-check overrides: state key -> request field (composite member check only; null = the solver's value)
+const MEMBER_OVR = { ci: 'camber_infill', cg: 'camber_girder', si: 'studs_infill', sg: 'studs_girder' };
+// most studs the solver's rib rule fits on a span (3 per rib, half-span count strictly below its maximum)
+const maxStuds = (span) => 2 * Math.floor(1.5 * span) - 1;
 
 export function createDesigner(root, ctx) {
   const S = { ...DEFAULTS, ...store.get('designer', {}), auto: store.get('auto', true) };
@@ -107,6 +111,13 @@ export function createDesigner(root, ctx) {
       <div id="checkPick" hidden>
         <div class="field"><div class="field-label"><span>Infill beam W-shape${help('The beams that span between the girders (length L_j). Type to search, e.g. W16X26.')}</span></div><div class="shape-pick" id="isPick"></div></div>
         <div class="field"><div class="field-label"><span>Girder W-shape${help('The two beams on the column lines that carry the infills (length L_g).')}</span></div><div class="shape-pick" id="gsPick"></div></div>
+        <div class="field" id="ovrField"><div class="field-label"><span>Camber and studs${help('Optional. Leave a box blank and the paper\'s solver sets the value (shown in grey). Solver camber: 0.8 × the construction deflection, rounded to ¼ in, only when that exceeds ⅝ in on spans of 24 ft or more. Solver studs: the fewest ¾ in studs that reach the degree of composite action. A number you type replaces the solver\'s value on that member. Your studs then set ΣQn (half the studs on each side of midspan × Qn, up to full composite), the solver\'s rule for fitting them in the ribs is kept, and the member must still reach 25 % composite.')}</span><button type="button" class="link-btn" id="ovrReset">Use solver values</button></div>
+          <table class="ovr"><tr><th></th><th>Infill beam</th><th>Girder</th></tr>
+            <tr><td>Camber</td><td><div class="num-box" id="ciB"><input type="number" id="ciN" min="0" max="4" step="0.25" aria-label="Infill camber in inches (blank = solver)"><span>in</span></div></td>
+              <td><div class="num-box" id="cgB"><input type="number" id="cgN" min="0" max="4" step="0.25" aria-label="Girder camber in inches (blank = solver)"><span>in</span></div></td></tr>
+            <tr><td>Studs</td><td><div class="num-box" id="siB"><input type="number" id="siN" min="0" step="1" aria-label="Studs on one infill beam (blank = solver)"><span>ea</span></div></td>
+              <td><div class="num-box" id="sgB"><input type="number" id="sgN" min="0" step="1" aria-label="Studs on one girder (blank = solver)"><span>ea</span></div></td></tr></table>
+          <div class="sub-unit" id="ovrInfo"></div></div>
         <button class="btn btn-sm btn-ghost" id="useOpt" style="margin:-4px 0 12px">Start from the optimizer's design</button>
       </div>
       <div id="assume"></div>
@@ -180,6 +191,16 @@ export function createDesigner(root, ctx) {
     $('#fwN', R).onchange = (e) => set({ fw: Math.max(20, Math.min(2000, +e.target.value || 200)) });
     $('#runBtn', R).onclick = () => run(true);
     $('#autoChk', R).onchange = (e) => { S.auto = e.target.checked; store.set('auto', S.auto); if (S.auto) run(); };
+    for (const k of Object.keys(MEMBER_OVR)) {
+      $(`#${k}N`, R).onchange = (e) => {
+        const raw = e.target.value.trim();
+        let v = +raw;
+        if (raw === '' || !Number.isFinite(v) || v < 0) return set({ [k]: null });
+        v = k[0] === 'c' ? Math.min(4, Math.round(v * 4) / 4) : Math.min(maxStuds(k === 'si' ? S.i : S.g), Math.round(v));
+        set({ [k]: v });
+      };
+    }
+    $('#ovrReset', R).onclick = () => set({ ci: null, cg: null, si: null, sg: null });
     $('#useOpt', R).onclick = () => {
       const st = result?.states?.best || result?.states?.initial;
       if (st?._applies) set({ is: st['Infill Sizes'], gs: st['Girder Sizes'] });
@@ -216,6 +237,18 @@ export function createDesigner(root, ctx) {
     $$('#clearSeg button', R).forEach(b => b.classList.toggle('on', +b.dataset.v === S.clear));
     $('#flN', R).value = S.fl; $('#fwN', R).value = S.fw;
     $('#checkPick', R).hidden = S.mode !== 'check';
+    $('#ovrField', R).hidden = S.system !== 'composite';
+    for (const k of Object.keys(MEMBER_OVR)) {
+      const inp = $(`#${k}N`, R);
+      if (document.activeElement !== inp) inp.value = S[k] ?? '';
+      const sv = solverVal(k);
+      inp.placeholder = sv === null || sv === undefined ? 'auto' : `auto ${k[0] === 'c' ? fmt(sv, 2) : fmt(sv, 0)}`;
+      $(`#${k}B`, R).classList.toggle('set', S[k] !== null && S[k] !== undefined);
+    }
+    $('#siN', R).max = maxStuds(S.i); $('#sgN', R).max = maxStuds(S.g);
+    $('#ovrReset', R).disabled = !memberOverrides();
+    $('#ovrInfo', R).innerHTML = (memberOverrides() ? '<span style="color:var(--warn)">Set by you — outside the paper\'s method.</span> ' : 'Blank = the solver\'s value. ') +
+      `Up to ${maxStuds(S.i)} studs fit on an infill and ${maxStuds(S.g)} on a girder (3 per rib).`;
     renderAssume();
     $('#autoChk', R).checked = !!S.auto;
     $('#plan', R).innerHTML = planSVG();
@@ -277,6 +310,7 @@ export function createDesigner(root, ctx) {
     if (S.view && S.view !== 'best') q.set('st', S.view);
     if (S.ninf) q.set('n', S.ninf);
     if (S.slab) q.set('sl', S.slab);
+    if (memberOverrides()) for (const k of Object.keys(MEMBER_OVR)) if (S[k] !== null && S[k] !== undefined) q.set(k, S[k]);
     history.replaceState(null, '', `#/designer?${q}`);
   }
   function readHash(qs) {
@@ -298,6 +332,7 @@ export function createDesigner(root, ctx) {
     S.view = q.get('st') || (S.mode === 'check' ? 'check' : 'best');
     S.ninf = q.has('n') && +q.get('n') >= 1 ? Math.min(14, Math.round(+q.get('n'))) : null;
     S.slab = q.has('sl') && +q.get('sl') > 0 ? +q.get('sl') : null;
+    for (const k of Object.keys(MEMBER_OVR)) S[k] = q.has(k) && q.get(k) !== '' && Number.isFinite(+q.get(k)) && +q.get(k) >= 0 ? +q.get(k) : null;
   }
 
   // ------------------------------------------------------------------ solver
@@ -307,6 +342,25 @@ export function createDesigner(root, ctx) {
     const smax = window.__msveMeta?.systems?.[S.system]?.spacing_lookup?.[`${S.conc}|${S.deck}`] || 10;
     return Math.max(1, Math.ceil(S.g / smax - 1));     // the solver's rule, for display only
   }
+  // member-check overrides that apply to this request (composite member check only)
+  function memberOverrides() {
+    if (S.mode !== 'check' || S.system !== 'composite') return null;
+    const o = {};
+    for (const [k, f] of Object.entries(MEMBER_OVR)) if (S[k] !== null && S[k] !== undefined) o[f] = k[0] === 's' ? Math.min(maxStuds(k === 'si' ? S.i : S.g), S[k]) : S[k];
+    return Object.keys(o).length ? o : null;
+  }
+  // the solver's own camber / studs for the checked pair, remembered from the last run that did not override them
+  let solverMem = { key: null };
+  const memberKey = (r) => JSON.stringify([r.system, r.girder_span, r.infill_span, r.conc_type, +r.deck_type, r.percent_comp, r.building_use, r.clear_spans, r.num_infill || null, r.slab_total || null, r.infill_shape, r.girder_shape]);
+  function rememberSolver(res) {
+    const v = res.captured?.check?.values;
+    if (!v || res.system !== 'composite') return;
+    const r = res.request, key = memberKey(r);
+    if (solverMem.key !== key) solverMem = { key };
+    const src = { ci: v.camber_II, cg: v.camber_IG, si: v.min_req_studs_II, sg: v.min_req_studs_IG };
+    for (const [k, f] of Object.entries(MEMBER_OVR)) if (r[f] === null || r[f] === undefined) solverMem[k] = src[k];
+  }
+  function solverVal(k) { return solverMem.key === memberKey(request()) ? solverMem[k] : null; }
   function slabOptions() { return window.__msveMeta?.slab_options?.[`${S.conc}|${S.deck}`] || []; }
 
   function request() {
@@ -314,6 +368,7 @@ export function createDesigner(root, ctx) {
     if (S.mode === 'check') { b.infill_shape = S.is; b.girder_shape = S.gs; }
     if (S.ninf) b.num_infill = S.ninf;
     if (S.slab) b.slab_total = S.slab;
+    Object.assign(b, memberOverrides() || {});
     return b;
   }
 
@@ -346,6 +401,7 @@ export function createDesigner(root, ctx) {
       res._clientMs = performance.now() - t0;
       result = res;
       if (res.ok) {
+        rememberSolver(res);
         if (S.mode === 'check') S.view = 'check';
         else if (!res.captured[S.view]) S.view = res.captured.best ? 'best' : 'initial';
         await matchDataset(res);
@@ -369,7 +425,7 @@ export function createDesigner(root, ctx) {
 
   // ------------------------------------------------------------------ dataset (instant preview + validation)
   function onGrid() {
-    return !S.ninf && !S.slab && S.use === 3 && S.clear === 3 && S.fl === 200 && S.fw === 200 && S.g >= 10 && S.g <= 50 && S.i >= 10 && S.i <= 50 &&
+    return !S.ninf && !S.slab && !memberOverrides() && S.use === 3 && S.clear === 3 && S.fl === 200 && S.fw === 200 && S.g >= 10 && S.g <= 50 && S.i >= 10 && S.i <= 50 &&
       (S.system === 'noncomposite' || [25, 50, 75].includes(S.pcc));
   }
   async function getDs(sys) { if (!ds[sys]) ds[sys] = await loadDataset(sys); return ds[sys]; }
@@ -404,11 +460,15 @@ export function createDesigner(root, ctx) {
     const r = res.request || {};
     return r.system === S.system && r.girder_span === S.g && r.infill_span === S.i && r.conc_type === S.conc && +r.deck_type === S.deck &&
       (S.system === 'noncomposite' || r.percent_comp === S.pcc) && r.building_use === S.use && r.clear_spans === S.clear &&
-      (r.num_infill || null) === (S.ninf || null) && (r.slab_total || null) === (S.slab || null);
+      (r.num_infill || null) === (S.ninf || null) && (r.slab_total || null) === (S.slab || null) &&
+      Object.values(MEMBER_OVR).every(f => (r[f] ?? null) === ((memberOverrides() || {})[f] ?? null));
   }
 
   async function matchDataset(res) {
     res._match = null;
+    // beam count / slab depth set by the user: not the paper's method, so not compared with its dataset
+    // (camber and studs apply to the checked pair only; the optimizer's states are the solver's own)
+    if (res.variant && (res.variant.infill_count || res.variant.slab_total)) return;
     const r = res.request;
     const grid = r.building_use === 3 && r.clear_spans === 3 && r.floor_length === 200 && r.floor_width === 200 &&
       r.girder_span >= 10 && r.girder_span <= 50 && r.infill_span >= 10 && r.infill_span <= 50 &&
@@ -509,7 +569,7 @@ export function createDesigner(root, ctx) {
       <div class="v-top"><div><div class="tiny muted">${res.system === 'composite' ? 'Composite' : 'Non-composite'} · ${S.mode === 'check' ? 'your members' : 'optimized by the paper\'s solver'}</div>
       <h3>${esc(STATE_SHORT[key])}${key === 'best' ? ' <span class="star">★</span>' : ''}</h3></div>
       ${pass ? '<span class="pill pass">✓ meets 0.5 %g</span>' : '<span class="pill fail">✗ exceeds limit</span>'}</div>
-      ${res.variant ? `<div class="warn-box" style="margin-top:8px"><b>Set by you</b> — ${esc(res.variant.note)}</div>` : ''}
+      ${res.variant ? `<div class="warn-box" style="margin-top:8px"><b>Set by you</b> — ${esc(res.variant.note)}${res.variant.member && Object.keys(res.variant.member).length ? ' Your camber and studs apply to your members only; the optimizer’s states use the solver’s own values.' : ''}</div>` : ''}
       ${S.mode === 'optimize' ? `<div class="small" style="margin-top:6px;color:var(--text2)">Lowest-carbon fix chosen by the solver: <b style="color:${METHOD_COLORS[method]}">${esc(methodTxt)}</b></div>` : ''}
       ${S.mode === 'check' && key === 'check' ? (() => {
         const f = calcInfo[res.system] ? C.failingChecks(calcInfo[res.system], v) : { structural: [], filters: [] };
@@ -631,13 +691,16 @@ export function createDesigner(root, ctx) {
     const v = result.captured[k].values;
     const comp = result.system === 'composite';
     const lw = v.Conc_Type === 'LW';
+    const mo = {};
+    if (k === 'check') for (const f of Object.values(MEMBER_OVR)) if (result.request?.[f] !== null && result.request?.[f] !== undefined) mo[f] = result.request[f];
+    const mine = (f) => (mo[f] === undefined ? '' : ' <b style="color:var(--warn)">(set by you)</b>');
     const rows = [
       ['Infill spacing', `${fmt(v.infill_spacing, 3)} ft (${v.NumInfill} interior infills), from the deck table`],
       ['Deck / slab', `${esc(v.selected_deck)}; ${fmt(v.Deck_Type + v.selected_deck_topping_thickness + (v.Additional_Topping || 0), 2)} in total depth`],
-      comp ? ['Studs', `¾ in, F<sub>u</sub> = 65 ksi; infill ${fmt(v.min_req_studs_II, 0)}, girder ${fmt(v.min_req_studs_IG, 0)} (sized for the composite action)`] : null,
+      comp ? ['Studs', `¾ in, F<sub>u</sub> = 65 ksi; infill ${fmt(v.min_req_studs_II, 0)}${mine('studs_infill')}, girder ${fmt(v.min_req_studs_IG, 0)}${mine('studs_girder')}${mo.studs_infill === undefined && mo.studs_girder === undefined ? ' (sized for the composite action)' : ''}`] : null,
       ['Materials', `F<sub>y</sub> = ${v.Fy} ksi, E<sub>s</sub> = ${fmt(v.Es, 0)} ksi, f'<sub>c</sub> = ${v.f_prime_c} ksi, ${lw ? 'LWC 110' : 'NWC 145'} pcf`],
       ['Loads', `LL ${v.LL} psf, SDL ${v.SDL} psf, construction LL 20 psf; LRFD 1.4D and 1.2D + 1.6L`],
-      ['Construction', comp ? 'unshored: bare steel carries the wet concrete; camber 0.8 × construction deflection (¼ in steps, spans ≥ 24 ft)' : 'non-composite beams; deck braces the infill top flange'],
+      ['Construction', comp ? `unshored: bare steel carries the wet concrete; camber ${mo.camber_infill === undefined && mo.camber_girder === undefined ? '0.8 × construction deflection (¼ in steps, spans ≥ 24 ft)' : `infill ${fmt(v.camber_II, 2)} in${mine('camber_infill')}, girder ${fmt(v.camber_IG, 2)} in${mine('camber_girder')}`}` : 'non-composite beams; deck braces the infill top flange'],
       ['Vibration (DG 11)', `vibration LL ${v.live_load_vibrations} psf + ${fmt(v.dead_load, 0)} psf; β = ${v.DR}; limit ${v.tolerance_limit} %g; W<sub>j</sub> × 1.5 (continuous infills)`],
     ].filter(Boolean);
     const body = `<table>${rows.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('')}</table>`;

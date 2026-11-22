@@ -117,6 +117,42 @@ VARIANT_PATCHES = {
     ],
 }
 
+# Composite only (the non-composite solver has no studs or camber). Used by the member check.
+#   camber_II_override / camber_IG_override -- camber (in) instead of 0.8 x construction deflection
+#   studs_II_override / studs_IG_override   -- studs on the member instead of the count the degree of
+#       composite action needs. The solver's rule for fitting studs in the ribs is kept (fewest studs
+#       per rib for which the half-span holds more than half the studs); sum Qn becomes the studs on a
+#       half span x Qn, capped at V', and the member needs at least 25 % composite action.
+_FIT = '(max_studs_half_{m} > float(studs_{m}_override) / 2)'
+COMPOSITE_USER_PATCHES = [
+    ('slab_total_override=None, ):',
+     'slab_total_override=None, camber_II_override=None, camber_IG_override=None, '
+     'studs_II_override=None, studs_IG_override=None, ):'),
+] + [p for m in ('II', 'IG') for p in (
+    (f'        req_studs_{m} = np.ceil(req_studs_half_filter_{m} * 2)\n',
+     f'        req_studs_{m} = np.ceil(req_studs_half_filter_{m} * 2) if studs_{m}_override is None else '
+     f'np.where({_FIT.format(m=m)} & (np.cumsum({_FIT.format(m=m)}, axis=2) == 1), float(studs_{m}_override), np.nan) '
+     f'+ 0 * req_studs_half_{m}\n'),
+    (f'        elif 25 <= percent_comp < 100:\n            Sigma_Qn_{m} = percent_comp / 100 * V_prime_{m}\n',
+     f'        elif 25 <= percent_comp < 100:\n            Sigma_Qn_{m} = percent_comp / 100 * V_prime_{m} if studs_{m}_override is None else '
+     + ('np.minimum(stud_capacity_II / 2, V_prime_II)\n' if m == 'II' else
+        'np.minimum(stud_capacity_IG[..., np.newaxis] / 2, V_prime_IG)\n')),
+)] + [
+    ('        PCC_check_II = np.max(max_PCC_II >= percent_comp, axis=2)\n',
+     '        PCC_check_II = np.max(max_PCC_II >= percent_comp, axis=2) if studs_II_override is None else '
+     '(np.isfinite(min_req_studs_II) & (Sigma_Qn_II / V_prime_II * 100 >= 25))\n'),
+    ('        PCC_check_flat_IG = np.max(max_PCC_IG, axis=2) >= percent_comp\n',
+     '        PCC_check_flat_IG = np.max(max_PCC_IG, axis=2) >= percent_comp if studs_IG_override is None else '
+     '(np.isfinite(min_req_studs_IG) & (Sigma_Qn_IG[..., 0] / V_prime_IG[..., 0] * 100 >= 25))\n'),
+    ('        camber_II = np.minimum(np.where(camber_check, np.around(0.8 * DEF_Con_II / 0.25) * 0.25, 0), 4)',
+     '        camber_II = np.minimum(np.where(camber_check, np.around(0.8 * DEF_Con_II / 0.25) * 0.25, 0), 4) '
+     'if camber_II_override is None else np.full_like(DEF_Con_II, float(camber_II_override))'),
+    ('        camber_IG = np.minimum(np.where(camber_check_IG, np.round(0.8 * DEF_Con_IG / 0.25) * 0.25, 0), 4)',
+     '        camber_IG = np.minimum(np.where(camber_check_IG, np.round(0.8 * DEF_Con_IG / 0.25) * 0.25, 0), 4) '
+     'if camber_IG_override is None else np.full_like(DEF_Con_IG, float(camber_IG_override))'),
+]
+MEMBER_OVERRIDES = ('camber_II_override', 'camber_IG_override', 'studs_II_override', 'studs_IG_override')
+
 
 def slab_options() -> dict:
     """Total slab depths the deck table offers, keyed 'conc|deck' (conc 0 = NW, 1 = LW)."""
@@ -429,7 +465,8 @@ class PaperEngine:
         self.prelude = '\n'.join(cells[:-1])
         self.source_sha256 = sha256_text(self.source)        # hash of the PUBLISHED cell
         if variant:
-            for a, b in VARIANT_PATCHES[variant]:
+            patches = VARIANT_PATCHES[variant] + (COMPOSITE_USER_PATCHES if variant == 'user' and self.composite else [])
+            for a, b in patches:
                 assert self.source.count(a) == 1, (variant, a)
                 self.source = self.source.replace(a, b)
             assert self.source.count('\n') == cells[-1].count('\n')   # line numbers unchanged
@@ -468,6 +505,10 @@ class PaperEngine:
         if self.variant == 'user':
             kw['num_infill_override'] = int(p['num_infill']) if p.get('num_infill') else None
             kw['slab_total_override'] = float(p['slab_total']) if p.get('slab_total') else None
+            if self.composite:
+                for k, src, cast in (('camber_II_override', 'camber_infill', float), ('camber_IG_override', 'camber_girder', float),
+                                     ('studs_II_override', 'studs_infill', int), ('studs_IG_override', 'studs_girder', int)):
+                    kw[k] = cast(p[src]) if p.get(src) is not None else None
         return kw
 
     def _call(self, kw: dict):
@@ -644,7 +685,7 @@ class PaperEngine:
                 if isinstance(v, list):
                     v = np.array([np.nan if x is None else x for x in v], dtype=float)
                 elif v is None:
-                    v = np.nan
+                    v = None if nm.endswith('_override') else np.nan
                 elif isinstance(v, bool):
                     v = np.bool_(v)
                 elif isinstance(v, (int, float)):
@@ -732,17 +773,44 @@ class PaperEngine:
             'captured': captured,
             'timing_s': {'solve': round(t1 - t0, 3), 'capture': round(t2 - t1, 3)},
             'engine': self.provenance(),
-            'variant': (None if not self.variant else {
+            'variant': self._variant_info(kw),
+        }
+        return out
+
+    def _variant_info(self, kw: dict) -> dict | None:
+        if not self.variant:
+            return None
+        return {
                 'name': self.variant,
                 'infill_count': kw.get('num_infill_override'),
                 'slab_total': kw.get('slab_total_override'),
+                'member': {k: kw.get(k) for k in MEMBER_OVERRIDES if kw.get(k) is not None},
                 'note': 'Set by the user instead of by the solver: '
-                        + ', '.join(x for x in [f"{kw.get('num_infill_override')} interior infills" if kw.get('num_infill_override') else '',
-                                                f"{kw.get('slab_total_override'):g} in total slab depth" if kw.get('slab_total_override') else ''] if x)
+                        + ', '.join(x for x in [
+                            f"{kw.get('num_infill_override')} interior infills" if kw.get('num_infill_override') else '',
+                            f"{kw.get('slab_total_override'):g} in total slab depth" if kw.get('slab_total_override') else '',
+                            f"infill camber {kw['camber_II_override']:g} in" if kw.get('camber_II_override') is not None else '',
+                            f"girder camber {kw['camber_IG_override']:g} in" if kw.get('camber_IG_override') is not None else '',
+                            f"{kw['studs_II_override']} studs per infill" if kw.get('studs_II_override') is not None else '',
+                            f"{kw['studs_IG_override']} studs per girder" if kw.get('studs_IG_override') is not None else '',
+                        ] if x)
                         + '. Uses a copy of the published solver with one-line overrides (identical to it when not set); '
-                          'outside the method of the paper.'}),
-        }
-        return out
+                          'outside the method of the paper.'}
+
+    def check_pair(self, p: dict, infill_shape: str, girder_shape: str) -> dict:
+        """Capture one infill/girder pair only (the member check with user camber or studs).
+        The optimizer's states are not taken from this run: with an override every shape
+        would carry the user's value."""
+        if infill_shape not in self.shapes or girder_shape not in self.shapes:
+            return {'ok': False, 'error': 'Pick an infill and a girder W-shape from the AISC list.'}
+        kw = self._kwargs(p)
+        t0 = time.perf_counter()
+        with _RUN_LOCK:
+            captured = self._capture(kw, {'check': (0.0, infill_shape, girder_shape)})
+        for cap in captured.values():
+            cap['recheck'] = self._recheck(cap)
+        return {'ok': 'check' in captured, 'captured': captured, 'inputs': kw, 'variant': self._variant_info(kw),
+                'timing_s': round(time.perf_counter() - t0, 3)}
 
     def provenance(self) -> dict:
         return {'notebook': NOTEBOOKS[self.system], 'notebook_sha256': self.notebook_sha256,

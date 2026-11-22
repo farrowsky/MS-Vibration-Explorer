@@ -163,3 +163,32 @@ def test_user_overrides_apply_and_validate(system):
         assert cap['recheck']['n_bad'] == 0
         if 'validation' in cap:
             assert cap['validation']['all_ok']
+
+
+# member check: camber and studs set by the user (composite)
+PAIR = dict(infill_shape='W16X26', girder_shape='W24X55')
+
+
+def test_member_overrides_unset_match_published():
+    a = eng.get_engine('composite').design(BASE, mode='check', **PAIR)['captured']['check']['values']
+    b = eng.get_engine('composite', 'user').check_pair(dict(BASE), **PAIR)['captured']['check']['values']
+    for k, v in a.items():
+        if not isinstance(v, (dict, list)):
+            assert eng._same(v, b[k]), k
+
+
+def test_member_overrides_apply_and_recheck():
+    e = eng.get_engine('composite', 'user')
+    out = e.check_pair(dict(BASE, camber_infill=0.5, camber_girder=0, studs_infill=20, studs_girder=30), **PAIR)
+    cap = out['captured']['check']
+    v = cap['values']
+    assert v['camber_II'] == 0.5 and v['camber_IG'] == 0
+    assert v['min_req_studs_II'] == 20 and v['min_req_studs_IG'] == 30
+    # sum Qn = half the studs x Qn for the studs-per-rib the solver's rib rule gives, capped at V'
+    qn = v['Qn_II'][int(v['min_studs_per_rib_II']) - 1]
+    assert math.isclose(v['Sigma_Qn_II'], min(10 * qn, v['V_prime_II']))
+    assert math.isclose(v['DEF_CDL_II'], v['DEF_Con_II'] - 0.5)
+    assert cap['recheck']['n_bad'] == 0
+    # too few studs for 25 % composite, and more than the ribs hold
+    assert e.check_pair(dict(BASE, studs_infill=0), **PAIR)['captured']['check']['values']['PCC_check_II'] is False
+    assert e.check_pair(dict(BASE, studs_infill=200), **PAIR)['captured']['check']['values']['min_req_studs_II'] is None
