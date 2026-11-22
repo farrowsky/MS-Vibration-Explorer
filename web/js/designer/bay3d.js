@@ -174,7 +174,6 @@ export class Bay3D {
 
     const scene = new THREE.Scene();
     this.scene = scene;
-    scene.fog = new THREE.Fog(0x0a0e13, 120, 320);
     this.camera = new THREE.PerspectiveCamera(38, 1, 0.05, 1200);
     this.camera.position.set(42, 30, 48);
     this.controls = new OrbitControls(this.camera, renderer.domElement);
@@ -217,18 +216,7 @@ export class Bay3D {
     rim.position.set(-40, 20, -30);
     scene.add(rim);
 
-    // ground: a faint grid well below the floor
-    const grid = new THREE.GridHelper(400, 80, 0x2c3d50, 0x1a2430);
-    grid.position.y = -14;
-    grid.material.transparent = true;
-    grid.material.opacity = 0.55;
-    scene.add(grid);
-    this.grid = grid;
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.ShadowMaterial({ opacity: 0.28 }));
-    ground.rotation.x = -PI / 2;
-    ground.position.y = -13.98;
-    ground.receiveShadow = true;
-    scene.add(ground);
+    // no ground or grid: the view shows the bay only
 
     this.root = new THREE.Group();
     scene.add(this.root);
@@ -410,15 +398,14 @@ export class Bay3D {
     // ---- columns (context only, not designed) ----
     const colDims = { d: 14.0, bf: 14.5, tf: 0.71, tw: 0.44, kdes: 1.31 };
     this.columns = new THREE.Group();
-    const colH = 14 + 2;
+    // short stubs, about 3 ft above and below the floor (always at least 1 ft below the girder)
+    const colTop = 3, colBot = Math.max(3, gd.d * IN + 1);
     for (const [x, z] of [[0, 0], [Lg, 0], [0, Lj], [Lg, Lj]]) {
-      const g = extrude(iShape(colDims), colH, 1);
+      const g = extrude(iShape(colDims), colTop + colBot, 1);
+      g.translate(0, colDims.d / 2 * IN, 0);   // centre the section on the grid point
       const c = new THREE.Mesh(g, this.mat.column);
-      c.rotation.x = PI / 2;              // extrusion (z) -> down (-y)
-      c.position.set(x, 2 + colDims.d / 2 * IN, z + 0);
-      // centre the section on the grid point: shape spans y in [-d, 0] -> shift
-      c.geometry.translate(0, colDims.d / 2 * IN, 0);
-      c.position.y = 2;
+      c.rotation.x = PI / 2;                   // extrusion (z) -> down (-y)
+      c.position.set(x, colTop, z);
       this.columns.add(c);
     }
     this.columns.visible = this.layers.columns;
@@ -770,8 +757,13 @@ export class Bay3D {
     const { Lg, Lj } = this.model;
     const R = Math.max(Lg, Lj);
     const t = new THREE.Vector3(0, -0.6, 0);
+    // distance that fits the bay (plus the toolbar/HUD overlays) in this viewport, any aspect ratio
+    const vfov = THREE.MathUtils.degToRad(this.camera.fov);
+    const hfov = 2 * Math.atan(Math.tan(vfov / 2) * this.camera.aspect);
+    const fit = (0.5 * Math.hypot(Lg, Lj) + 1.5) * 1.18 / Math.sin(Math.min(vfov, hfov) / 2);
+    const along = (x, y, z) => new THREE.Vector3(x, y, z).normalize().multiplyScalar(fit);
     let p;
-    if (name === 'top') p = new THREE.Vector3(0.001, R * 1.75, 0.01);
+    if (name === 'top') p = new THREE.Vector3(0.001, fit, 0.01);
     else if (name === 'section') {
       const xc = (this.cut > 0 ? this.cut * Lg : Lg * 0.5) - Lg / 2;
       if (this.cut <= 0) this.setSection(0.5);
@@ -782,14 +774,14 @@ export class Bay3D {
       const gdep = (this.model.girder.dims?.d || 18) * IN;
       p = new THREE.Vector3(xc - 7.5, -gdep * 0.3, zf);
       t.set(xc, -gdep * 0.3, zf);
-    } else if (name === 'under') p = new THREE.Vector3(Lg * 0.55, -R * 0.42 - 4, Lj * 0.75);
+    } else if (name === 'under') p = along(0.55, -0.45, 0.75);
     else if (name === 'close') {
       // first interior infill framing into the front girder, seen from below and outside
       const xs = -Lg / 2 + (this.model.s || Lg / 2);
       p = new THREE.Vector3(xs + 5.5, -3.2, -Lj / 2 - 5.0);
       t.set(xs, -0.9, -Lj / 2 + 1.2);
     }
-    else p = new THREE.Vector3(R * 1.0, R * 0.68, R * 1.12);
+    else p = along(0.8, 0.62, 0.95);
     this._tween(p, t, animate ? 900 : 0);
   }
 
