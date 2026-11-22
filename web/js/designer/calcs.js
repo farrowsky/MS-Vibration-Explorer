@@ -143,16 +143,32 @@ export function renderChecks(calcmap, cap, inputs, { mode = 'optimize' } = {}) {
     }
     return html + '</tbody></table>';
   };
-  let html = '<div class="muted small" style="margin-bottom:8px">Pass / fail is the solver\'s own boolean for each check (the variable named on the right). Demand, capacity and the utilisation bar are shown for reading only.</div>';
+  const sp = structuralPass(calcmap, vals);
+  let html = `<div class="row" style="gap:14px;flex-wrap:wrap;margin-bottom:10px">
+    <span>Strength and deflection: ${sp ? '<span class="pill pass">all pass</span>' : '<span class="pill fail">fail</span>'}</span>
+    <span>Vibration (DG 11, a<sub>p</sub>/g ≤ ${vals.tolerance_limit} %g): ${vals.vibration_check === false ? '<span class="pill fail">fails</span>' : '<span class="pill pass">passes</span>'} <span class="muted small">${fmt(vals.peak_acceleration, 3)} %g</span></span></div>
+    <div class="muted small" style="margin-bottom:8px">LRFD (AISC 360): demands from 1.4D and 1.2D + 1.6L; capacities are design strengths φM<sub>n</sub> / φV<sub>n</sub>. Construction-stage checks use the bare steel with wet concrete (unshored). Pass / fail is the solver's own boolean for each check (variable on the right); demand, capacity and utilisation are shown for reading.</div>`;
   html += group('Infill beam', calcmap.checks.infill);
   html += group('Girder', calcmap.checks.girder);
-  html += `<div style="margin-top:14px"></div>` + group(mode === 'check' ? 'Optimizer selection filters (not structural; only matter when the optimizer picks members)' : 'Optimizer selection filters', calcmap.checks.filters);
-  const fc = vals.final_check, cc = vals.combined_check;
-  html += `<div class="row" style="margin-top:10px;gap:14px;flex-wrap:wrap">
-    <span>All structural checks: ${structuralPass(calcmap, vals) ? '<span class="pill pass">pass</span>' : '<span class="pill fail">fail</span>'}</span>
-    <span>combined_check: ${valueHTML(cc)}</span><span>final_check (candidate for the optimizer): ${valueHTML(fc)}</span>
-    <span>Vibration: ${valueHTML(vals.vibration_check)}</span></div>`;
+  if (mode === 'check') {
+    let fails = [];
+    for (const c of calcmap.checks.filters) { let f = vals[c.flag]; if (f && typeof f === 'object' && 'infill' in f) f = c.flag === 'Eco' ? f.girder : f.infill; if (f === false) fails.push(c.label.toLowerCase()); }
+    html += `<div class="muted small" style="margin-top:12px">Optimizer selection rules (not structural): ${fails.length ? `this pair would not have been picked — ${esc(fails.join('; '))}.` : 'this pair is also a candidate the optimizer could pick.'}</div>`;
+  } else {
+    html += `<div style="margin-top:14px"></div>` + group('Optimizer selection rules (not structural)', calcmap.checks.filters);
+  }
   return html;
+}
+
+// structural checks that fail, and optimizer-only filters that fail, for a summary line
+export function failingChecks(calcmap, vals) {
+  const out = { structural: [], filters: [] };
+  for (const grp of ['infill', 'girder', 'filters']) for (const c of calcmap.checks[grp]) {
+    let f = vals[c.flag];
+    if (f && typeof f === 'object' && 'infill' in f) f = c.flag === 'Eco' ? f.girder : f.infill;
+    if (f === false) (grp === 'filters' ? out.filters : out.structural).push(grp === 'filters' ? c.label : `${c.label} (${grp})`);
+  }
+  return out;
 }
 
 export function structuralPass(calcmap, vals) {
@@ -170,9 +186,10 @@ const CHAIN = [
   ['Ec', 'Concrete modulus'], ['n', 'Dynamic modular ratio'], ['Ij', 'Infill transformed inertia'],
   ['wj', 'Infill vibration load'], ['DEF_j', 'Infill deflection'], ['fj', 'Beam panel frequency'],
   ['Ds', 'Slab stiffness per unit width'], ['Dj', 'Infill stiffness per unit width'], ['Bj', 'Beam panel width'],
-  ['Wj', 'Beam panel weight'], ['Ig', 'Girder transformed inertia'], ['wg', 'Girder vibration load'],
+  ['Bj_check', 'Bj ≤ 2/3 floor width (reported only, Bj is not capped)'],
+  ['Wj', 'Beam panel weight (× 1.5: infills treated as continuous)'], ['Ig', 'Girder transformed inertia'], ['wg', 'Girder vibration load'],
   ['DEF_g', 'Girder deflection'], ['fg', 'Girder panel frequency'], ['Dg', 'Girder stiffness per unit width'],
-  ['Bg', 'Girder panel width'], ['Wg', 'Girder panel weight'], ['fn', 'Combined floor frequency'],
+  ['Bg', 'Girder panel width'], ['Bg_check', 'Bg ≤ 2/3 floor length (reported only, Bg is not capped)'], ['Wg', 'Girder panel weight'], ['fn', 'Combined floor frequency'],
   ['DEF_g_reduced', 'Reduced girder deflection'], ['W', 'Equivalent panel weight'],
   ['ap_over_g', 'Peak acceleration ratio'], ['peak_acceleration', 'Peak acceleration (%g)'], ['vibration_check', 'Meets tolerance limit'],
 ];

@@ -160,15 +160,28 @@ Cite: S. D. Farrow, N. C. Brown, R. L. Solnosky, <i>Carbon-Efficient Design Stra
 export function openReport(args) {
   if (!args.result?.ok || !args.key || !args.calcInfo) return;
   const html = buildReport(args);
-  const w = window.open('', '_blank');
-  if (!w) {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
-    a.download = 'calc_report.html';
-    a.click();
-    return;
-  }
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
+  // shown in-page (no popup blocker can stop it); print / download work from inside the frame
+  document.getElementById('reportView')?.remove();
+  const wrap = document.createElement('div');
+  wrap.id = 'reportView';
+  wrap.className = 'lightbox';
+  wrap.style.gridTemplateRows = 'auto 1fr';
+  wrap.innerHTML = `<div class="lb-head"><h3>Calculation report</h3><span class="spacer"></span>
+    <button class="btn btn-sm btn-primary" id="rvPrint">Print / save as PDF</button>
+    <button class="btn btn-sm" id="rvTab">Open in new tab</button>
+    <button class="btn btn-sm" id="rvClose" aria-label="Close the report">✕ Close</button></div>
+    <iframe title="Calculation report" style="width:100%;height:100%;border:0;background:#e9edf2"></iframe>`;
+  document.body.append(wrap);
+  const frame = wrap.querySelector('iframe');
+  frame.srcdoc = html;
+  const close = () => { wrap.remove(); document.removeEventListener('keydown', esc); };
+  const esc = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', esc);
+  wrap.querySelector('#rvClose').onclick = close;
+  wrap.querySelector('#rvPrint').onclick = () => frame.contentWindow?.print();
+  wrap.querySelector('#rvTab').onclick = () => {
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    const w = window.open(url, '_blank', 'noopener');
+    if (!w) { const a = document.createElement('a'); a.href = url; a.download = 'calc_report.html'; a.click(); }
+  };
 }

@@ -72,6 +72,21 @@ async def _lifespan(_app):
 app = FastAPI(title='MS Vibration Explorer', version=VERSION, docs_url='/api/docs', redoc_url=None,
               lifespan=_lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+
+@app.middleware('http')
+async def _cache_headers(request, call_next):
+    """Code revalidates on every load (cheap 304s, never stale after an update);
+    the packed data and figures are cached for a day."""
+    resp = await call_next(request)
+    path = request.url.path
+    if path.startswith('/api/'):
+        resp.headers.setdefault('Cache-Control', 'no-store')
+    elif path.endswith(('.bin', '.webp', '.svg', '.png')) or path.startswith('/vendor/'):
+        resp.headers.setdefault('Cache-Control', 'public, max-age=86400')
+    else:
+        resp.headers.setdefault('Cache-Control', 'no-cache')
+    return resp
 if os.environ.get('MSVE_ALLOW_ORIGIN'):
     app.add_middleware(CORSMiddleware, allow_origins=[os.environ['MSVE_ALLOW_ORIGIN']],
                        allow_methods=['GET', 'POST'], allow_headers=['*'])

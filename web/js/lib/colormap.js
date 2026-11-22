@@ -22,11 +22,11 @@ export const GRADIENT = `linear-gradient(90deg, ${HEX.map((h, i) => `${h} ${i * 
 
 // Categorical colours for mitigation methods, matching the paper's Figure 11 order.
 export const METHOD_COLORS = {
-  1: '#A3B376',   // passes as built
-  6: '#4178BE',   // upsize steel
-  2: '#85C1E9',   // upsize infills (raw)
-  3: '#FCAE2E',   // upsize girders (raw)
-  4: '#E57373',   // add topping
+  1: '#A3B376',   // passes as built        (Figure 11: green)
+  6: '#FCAE2E',   // upsize infills+girders (Figure 11: orange)
+  4: '#4178BE',   // add concrete topping   (Figure 11: blue)
+  2: '#85C1E9',   // upsize infills (raw engine code, folded into 6 in the paper)
+  3: '#E57373',   // upsize girders (raw engine code, folded into 6 in the paper)
   5: '#6b7785',   // none feasible
 };
 export const METHOD_LABELS = {

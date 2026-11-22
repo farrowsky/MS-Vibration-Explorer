@@ -572,11 +572,11 @@ export class Bay3D {
 
     // ---- labels ----
     const mid = xs[Math.max(1, Math.floor(xs.length / 2))];
-    const studTxt = (mm) => m.composite && mm.studs ? ` <small>[${mm.studs} studs${mm.perRib > 1 ? `, ${mm.perRib}/rib` : ''}]</small>` : '';
+    const studTxt = (mm, girder) => m.composite && mm.studs ? ` <small>[${mm.studs} studs${mm.perRib > 1 ? (girder ? `, ${mm.perRib} abreast` : `, ${mm.perRib}/rib`) : ''}]</small>` : '';
     const camTxt = (mm) => mm.camber ? ` <small>c = ${mm.camber}"</small>` : '';
-    this._label(new THREE.Vector3(Lg * 0.62, top + 0.2, 0), `<span style="color:#FCAE2E">●</span> Girder ${m.girder.name}${studTxt(m.girder)}${camTxt(m.girder)}`, 'girder');
+    this._label(new THREE.Vector3(Lg * 0.62, top + 0.2, 0), `<span style="color:#FCAE2E">●</span> Girder ${m.girder.name}${studTxt(m.girder, true)}${camTxt(m.girder)}`, 'girder');
     this._label(new THREE.Vector3(mid, top + 0.2, Lj * 0.5), `<span style="color:#85C1E9">●</span> Infill ${m.infill.name}${studTxt(m.infill)}${camTxt(m.infill)}`, 'infill');
-    this._label(new THREE.Vector3(Lg * 0.18, top + 0.2, Lj * 0.85), `${m.deckLabel || hr + '" deck'} <small>+ ${fmt2(m.tc + (m.add || 0))}" topping</small>`, 'deck');
+    this._label(new THREE.Vector3(Lg * 0.18, top + 0.2, Lj * 0.85), `${m.deckLabel || hr + '" deck'} <small>· ${fmt2(hr + m.tc + (m.add || 0))}" slab total</small>`, 'deck');
 
     this._applyLayers();
     this.setSection(this.cut);

@@ -160,6 +160,29 @@ async function renderAbout() {
   }
 }
 
+// ---------------------------------------------------------------- help popovers (click / keyboard, not hover-only)
+let pop = null;
+function closePop() { pop?.remove(); pop = null; }
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('.help');
+  if (!b) { if (!e.target.closest('.popover')) closePop(); return; }
+  e.preventDefault(); e.stopPropagation();
+  const same = pop && pop.dataset.for === b.dataset.help;
+  closePop();
+  if (same) return;
+  pop = document.createElement('div');
+  pop.className = 'popover';
+  pop.setAttribute('role', 'tooltip');
+  pop.dataset.for = b.dataset.help;
+  pop.textContent = b.dataset.help.replace(/_([a-z])/g, (m, c) => c);
+  document.body.append(pop);
+  const r = b.getBoundingClientRect();
+  pop.style.left = Math.max(8, Math.min(window.innerWidth - pop.offsetWidth - 8, r.left - 10)) + 'px';
+  pop.style.top = (r.bottom + 8 + pop.offsetHeight > window.innerHeight ? r.top - pop.offsetHeight - 8 : r.bottom + 8) + 'px';
+}, true);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePop(); });
+window.addEventListener('scroll', closePop, true);
+
 // ---------------------------------------------------------------- boot
 (async function boot() {
   disclaimer();

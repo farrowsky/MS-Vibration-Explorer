@@ -49,6 +49,8 @@ CASES = [
     ('composite', dict(girder_span=44, infill_span=26, deck_type=1.5, conc_type=1, percent_comp=25, building_use=1)),
     ('composite', dict(girder_span=18, infill_span=40, deck_type=2, percent_comp=75)),
     ('composite', dict(girder_span=55, infill_span=40)),
+    # best design comes from added topping: the known Infill Case Label quirk shows on 'best' too
+    ('composite', dict(girder_span=34, infill_span=46, deck_type=1.5, percent_comp=75)),
     ('noncomposite', {}),
     ('noncomposite', dict(girder_span=36, infill_span=24, deck_type=1.5, conc_type=1)),
     ('noncomposite', dict(girder_span=12, infill_span=48, deck_type=2)),

@@ -191,7 +191,7 @@ export function createExplorer(root, ctx) {
     cv.width = W * dpr; cv.height = H * dpr; cv.style.width = W + 'px'; cv.style.height = H + 'px';
     const g = cv.getContext('2d');
     g.scale(dpr, dpr);
-    const pad = { l: 58, r: 20, t: 18, b: 48 };
+    const pad = { l: 58, r: 20, t: 18, b: 60 };
     const size = Math.min((W - pad.l - pad.r), (H - pad.t - pad.b));
     const cs = size / 41;
     const ox = pad.l + (W - pad.l - pad.r - size) / 2, oy = pad.t;
@@ -264,7 +264,7 @@ export function createExplorer(root, ctx) {
       const r = stage.getBoundingClientRect();
       tip.style.left = Math.min(e.clientX - r.left + 14, r.width - 200) + 'px';
       tip.style.top = (e.clientY - r.top + 14) + 'px';
-      tip.innerHTML = `<b>${c.g} × ${c.i} ft</b> · ${c.g * c.i} ft² <div class="t-row"><span>${esc(M.label)}</span><b>${M.cat ? esc(METHOD_LABELS[c.v] || '—') + ` (${fmt(c.share * 100, 0)}%)` : fmt(c.v, 3) + ' ' + unitOf(k)}</b></div><div class="t-row"><span>designs</span><b>${c.rows.length}</b></div>`;
+      tip.innerHTML = `<b>L<sub>g</sub> ${c.g} × L<sub>j</sub> ${c.i} ft</b> · ${c.g * c.i} ft² <div class="t-row"><span>${esc(M.label)}</span><b>${M.cat ? esc(METHOD_LABELS[c.v] || '—') + ` (${fmt(c.share * 100, 0)}%)` : fmt(c.v, 3) + ' ' + unitOf(k)}</b></div><div class="t-row"><span>designs</span><b>${c.rows.length}</b></div>`;
     };
     cv.onmouseleave = () => { tip.hidden = true; };
     cv.onclick = (e) => { const c = at(e); if (c) { sel = { g: c.g, i: c.i }; renderStage(); } };
@@ -300,7 +300,7 @@ export function createExplorer(root, ctx) {
       tip.hidden = false;
       tip.style.left = Math.min(e.clientX - r.left + 14, r.width - 200) + 'px';
       tip.style.top = (e.clientY - r.top + 14) + 'px';
-      tip.innerHTML = `<b>${c.g} × ${c.i} ft</b><div class="t-row"><span>${esc(M.label)}</span><b>${fmt(c.v, 3)} ${unitOf(k)}</b></div><div class="t-row"><span>avg initial PA</span><b>${fmt(pa.get(c.g * 100 + c.i)?.v, 3)} %g</b></div>`;
+      tip.innerHTML = `<b>L<sub>g</sub> ${c.g} × L<sub>j</sub> ${c.i} ft</b><div class="t-row"><span>${esc(M.label)}</span><b>${fmt(c.v, 3)} ${unitOf(k)}</b></div><div class="t-row"><span>avg initial PA</span><b>${fmt(pa.get(c.g * 100 + c.i)?.v, 3)} %g</b></div>`;
     }, (c) => { sel = { g: c.g, i: c.i }; renderSelection(d); });
     $('#xFoot', root).innerHTML = `<span>colour: initial PA 0</span><div style="width:200px;height:10px;border-radius:3px;background:${GRADIENT}"></div><span>${fmt(pmax, 2)} %g</span><span>· glass plane: 0.5 %g${k === 'ipa' ? '' : ' (shown when height is peak acceleration)'}</span><span class="spacer"></span><span>Drag to orbit · click a bay</span>`;
   }
@@ -384,8 +384,8 @@ export function createExplorer(root, ctx) {
       tip.hidden = false;
       tip.style.left = Math.min(e.clientX - r.left + 14, r.width - 210) + 'px';
       tip.style.top = (e.clientY - r.top + 14) + 'px';
-      tip.innerHTML = `<b>${inp.g} × ${inp.i} ft</b> · ${inp.conc ? 'LWC' : 'NWC'} · ${inp.deck}" deck${d.system === 'composite' ? ` · ${inp.pcc}%` : ''}
-        <div class="t-row"><span>initial</span><b>${esc(d.shape('initial.inf', p.r))} / ${esc(d.shape('initial.gir', p.r))}</b></div>
+      tip.innerHTML = `<b>L<sub>g</sub> ${inp.g} × L<sub>j</sub> ${inp.i} ft</b> · ${inp.conc ? 'LWC' : 'NWC'} · ${inp.deck}" deck${d.system === 'composite' ? ` · ${inp.pcc}%` : ''}
+        <div class="t-row"><span>initial infill / girder</span><b>${esc(d.shape('initial.inf', p.r))} / ${esc(d.shape('initial.gir', p.r))}</b></div>
         <div class="t-row"><span>a_p</span><b>${fmt(d.get('initial.pa', p.r), 3)} %g</b></div><div class="t-row"><span>f_n</span><b>${fmt(d.get('initial.fn', p.r), 2)} Hz</b></div>`;
     };
     cv.onmouseleave = () => { tip.hidden = true; };
@@ -406,13 +406,13 @@ export function createExplorer(root, ctx) {
     }
     const rs = rows(d).filter(r => d.raw('g')[r] === sel.g && d.raw('i')[r] === sel.i);
     rs.sort((a, b) => d.get('initial.pa', b) - d.get('initial.pa', a));
-    let html = `<div class="card fade-in"><div class="card-h">${sel.g} × ${sel.i} ft bay <span class="sub">${sel.g * sel.i} ft² · ${rs.length} design${rs.length === 1 ? '' : 's'}</span></div><div class="card-b" style="padding:8px 10px">`;
+    let html = `<div class="card fade-in"><div class="card-h">L<sub>g</sub> ${sel.g} × L<sub>j</sub> ${sel.i} ft bay <span class="sub">${sel.g * sel.i} ft² · ${rs.length} design${rs.length === 1 ? '' : 's'}</span></div><div class="card-b" style="padding:8px 10px">`;
     html += '<table class="calc"><thead><tr><th>Design</th><th class="right">a<sub>p</sub> (%g)</th><th class="right">EC init → best</th><th></th></tr></thead><tbody>';
     for (const r of rs) {
       const inp = d.inputs(r);
       const pa = d.get('initial.pa', r), m = d.get('method', r);
       const ie = ecFromDataset(d.get('initial.ec', r)), be = ecFromDataset(d.get('best.ec', r));
-      html += `<tr${sel.row === r ? ' style="background:color-mix(in srgb,var(--accent) 14%,transparent)"' : ''}><td><b>${inp.conc ? 'LWC' : 'NWC'} · ${inp.deck}"${d.system === 'composite' ? ` · ${inp.pcc}%` : ''}</b><div class="tiny mono muted">${esc(d.shape('initial.inf', r))} / ${esc(d.shape('initial.gir', r))}</div>
+      html += `<tr${sel.row === r ? ' style="background:color-mix(in srgb,var(--accent) 14%,transparent)"' : ''}><td><b>${inp.conc ? 'LWC' : 'NWC'} · ${inp.deck}"${d.system === 'composite' ? ` · ${inp.pcc}%` : ''}</b><div class="tiny muted">infill <span class="mono">${esc(d.shape('initial.inf', r))}</span> · girder <span class="mono">${esc(d.shape('initial.gir', r))}</span></div>
         <div class="tiny" style="color:${METHOD_COLORS[m]}">${esc(METHOD_LABELS[m])}</div></td>
         <td class="v" style="color:${pa <= LIMIT ? 'var(--pass)' : 'var(--fail)'}">${fmtFixed(pa, 3)}</td>
         <td class="v">${fmtFixed(ie.v, 2)} → ${m === 5 ? '—' : fmtFixed(be.v, 2)}</td>

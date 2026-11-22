@@ -553,8 +553,10 @@ class PaperEngine:
                 continue
             ok = _same(reported, got)
             note = None
-            if not ok and (state_name, col) in KNOWN_REPORTING_QUIRKS:
-                note = KNOWN_REPORTING_QUIRKS[(state_name, col)]
+            # the best state reuses the concrete-path frame when added topping wins
+            quirk_state = 'conc' if state_name == 'best' and (state_rec.get('Additional Topping') or 0) > 0 else state_name
+            if not ok and (quirk_state, col) in KNOWN_REPORTING_QUIRKS:
+                note = KNOWN_REPORTING_QUIRKS[(quirk_state, col)]
             checks.append({'column': col, 'results_key': rkey, 'local': local,
                            'reported': reported, 'captured': got, 'ok': ok, 'known_quirk': note})
         compared = [c for c in checks if c['ok'] is not None]

@@ -34,7 +34,7 @@ export function createDesigner(root, ctx) {
       <div class="resize-handle" id="anResize" title="Drag to resize"></div>
       <div class="analysis" id="an">
         <div class="an-tabs" id="anTabs"></div>
-        <div class="an-body" id="anBody"><div class="muted">Run the solver to see every calculation.</div></div>
+        <div class="an-body stale-dim" id="anBody"><div class="muted">Run the solver to see every calculation.</div></div>
       </div>
     </div>
     <aside class="d-right" id="dOut"><div class="muted" style="padding:10px">Starting the solver…</div></aside>
@@ -83,9 +83,10 @@ export function createDesigner(root, ctx) {
     </svg>`;
   }
 
+  const help = (t) => `<button type="button" class="help" data-help="${esc(t)}" aria-label="Help">?</button>`;
   function spanField(key, label, hint) {
     return `<div class="field" data-f="${key}">
-      <div class="field-label"><span>${label}<span class="help" title="${esc(hint)}">?</span></span><span class="hint" id="${key}M"></span></div>
+      <div class="field-label"><span>${label}${help(hint)}</span><span class="hint" id="${key}M"></span></div>
       <div class="range-row"><input type="range" min="6" max="60" step="1" id="${key}R" aria-label="${label}">
       <div class="num-box"><input type="number" min="6" max="60" step="1" id="${key}N" aria-label="${label} in feet"><span>ft</span></div></div>
     </div>`;
@@ -103,40 +104,40 @@ export function createDesigner(root, ctx) {
         <button class="mode-card" data-v="optimize"><b>Optimize for me</b><span>Paper's solver picks the lowest-carbon members that pass</span></button>
         <button class="mode-card" data-v="check"><b>Check my members</b><span>Pick an infill and girder; see every check</span></button>
       </div>
+      <div id="checkPick" hidden>
+        <div class="field"><div class="field-label"><span>Infill beam W-shape${help('The beams that span between the girders (length L_j). Type to search, e.g. W16X26.')}</span></div><div class="shape-pick" id="isPick"></div></div>
+        <div class="field"><div class="field-label"><span>Girder W-shape${help('The two beams on the column lines that carry the infills (length L_g).')}</span></div><div class="shape-pick" id="gsPick"></div></div>
+        <button class="btn btn-sm btn-ghost" id="useOpt" style="margin:-4px 0 12px">Start from the optimizer's design</button>
+      </div>
+      <div id="assume"></div>
 
       <div class="panel-title">Bay geometry</div>
       <div style="display:flex;justify-content:center;margin:-4px 0 6px" id="plan"></div>
-      ${spanField('g', 'Girder span', 'Girders run between columns; the infill beams frame into them. Paper studied 10–50 ft.')}
-      ${spanField('i', 'Infill (beam) span', 'Infill beams span between the two girders. Paper studied 10–50 ft.')}
+      ${spanField('g', 'Girder span L<sub>g</sub>', 'Girders run column to column along this span; the infill beams frame into them. The deck ribs run parallel to the girders. Paper studied 10–50 ft.')}
+      ${spanField('i', 'Infill beam span L<sub>j</sub>', 'Infill (filler) beams span between the two girders; the solver spaces them along the girder from the deck table. Paper studied 10–50 ft.')}
 
       <div class="panel-title">Slab and deck</div>
       <div class="field"><div class="field-label"><span>Concrete</span></div>
         <div class="seg seg-block" id="concSeg"><button data-v="0">Normal-weight <span class="muted tiny">145 pcf</span></button><button data-v="1">Lightweight <span class="muted tiny">110 pcf</span></button></div></div>
-      <div class="field"><div class="field-label"><span>Deck rib depth<span class="help" title="Composite steel deck profile. The solver sizes the gauge and topping from the deck table.">?</span></span></div>
+      <div class="field"><div class="field-label"><span>Deck rib depth${help('Composite steel deck profile (VL type). The solver picks the gauge and the concrete above the ribs from its deck table, for the infill spacing it chose.')}</span></div>
         <div class="deck-icons" id="deckBtns">${[1.5, 2, 3].map(d => `<button class="deck-btn" data-v="${d}">${deckIcon(d)}${d}" deck</button>`).join('')}</div></div>
-      <div class="field" id="pccField"><div class="field-label"><span>Composite connection<span class="help" title="Percent of full composite action (shear studs). Paper studied 25, 50 and 75 %.">?</span></span><span class="hint" id="pccV"></span></div>
-        <input type="range" min="25" max="90" step="5" id="pccR" style="width:100%" list="pccTicks" aria-label="Percent composite connection">
-        <datalist id="pccTicks"><option value="25"></option><option value="50"></option><option value="75"></option></datalist>
-        <div class="row tiny muted" style="justify-content:space-between"><span>25 %</span><span>50 %</span><span>75 %</span><span>90 %</span></div></div>
+      <div class="field" id="pccField"><div class="field-label"><span>Degree of composite action${help('Partial composite connection: ΣQn as a percent of the force for full composite action (AISC 360 I3). The solver sizes the studs to reach it. Paper studied 25, 50 and 75 %; above about 80 % the studs often cannot fit.')}</span><span class="hint" id="pccV"></span></div>
+        <div class="row"><div class="seg seg-block" id="pccSeg" style="flex:1"><button data-v="25">25 %</button><button data-v="50">50 %</button><button data-v="75">75 %</button></div>
+        <div class="num-box" title="Other value, 25–90 % in 5 % steps (outside the study)"><input type="number" id="pccN" min="25" max="90" step="5" aria-label="Other degree of composite action, percent"><span>%</span></div></div></div>
 
       <div class="panel-title">Occupancy</div>
-      <div class="field"><select id="useSel" aria-label="Occupancy">${[3, 1, 2, 4].map(k => `<option value="${k}">${useName(k)}${k === 3 ? ' (paper)' : ''}</option>`).join('')}</select>
+      <div class="field"><select id="useSel" aria-label="Occupancy">${[3, 1, 2, 4].map(k => `<option value="${k}">${k === 3 ? 'Residence — study default' : useName(k)}</option>`).join('')}</select>
         <div class="sub-unit" id="useInfo"></div></div>
 
       <details class="adv" id="adv"><summary>Advanced inputs</summary>
-        <div class="field"><div class="field-label"><span>Deck continuity</span><span class="hint">clear spans</span></div>
-          <div class="seg seg-block" id="clearSeg"><button data-v="1">1 span</button><button data-v="2">2 spans</button><button data-v="3">3 spans</button></div></div>
-        <div class="field"><div class="field-label"><span>Floor plate (for DG 11 B<sub>j</sub>, B<sub>g</sub> limits)</span></div>
-          <div class="row"><div class="num-box" style="flex:1"><input type="number" id="flN" min="20" max="2000" aria-label="Floor length in feet"><span>ft long</span></div>
-          <div class="num-box" style="flex:1"><input type="number" id="fwN" min="20" max="2000" aria-label="Floor width in feet"><span>ft wide</span></div></div></div>
+        <div class="field"><div class="field-label"><span>Deck construction spans${help('Which column of the SDI/Vulcraft deck table the solver uses for the maximum unshored deck span: deck continuous over 1, 2 or 3 spans during construction. The paper used 3. This is not the DG 11 beam-continuity factor (the solver always applies 1.5 to W_j).')}</span></div>
+          <div class="seg seg-block" id="clearSeg"><button data-v="1">Single</button><button data-v="2">Double</button><button data-v="3">Triple</button></div></div>
+        <div class="field"><div class="field-label"><span>Floor extent${help('Report-only. The solver checks B_j ≤ 2/3 of the floor width and B_g ≤ 2/3 of the floor length and reports the result; it does not cap B_j or B_g. Default 200 × 200 ft, as in the paper.')}</span></div>
+          <div class="row"><div class="num-box" style="flex:1" title="Floor dimension along the girders — limits B_j"><input type="number" id="fwN" min="20" max="2000" aria-label="Floor width along the girders in feet (limits B_j)"><span>ft along girders</span></div></div>
+          <div class="row" style="margin-top:6px"><div class="num-box" style="flex:1" title="Floor dimension along the infills — limits B_g"><input type="number" id="flN" min="20" max="2000" aria-label="Floor length along the infills in feet (limits B_g)"><span>ft along infills</span></div></div>
+          <div class="sub-unit">width along girders limits B<sub>j</sub>; length along infills limits B<sub>g</sub></div></div>
       </details>
 
-      <div id="checkPick" hidden>
-        <div class="panel-title">Your members</div>
-        <div class="field"><div class="field-label"><span>Infill W-shape</span></div><div class="shape-pick" id="isPick"></div></div>
-        <div class="field"><div class="field-label"><span>Girder W-shape</span></div><div class="shape-pick" id="gsPick"></div></div>
-        <button class="btn btn-sm btn-ghost" id="useOpt">Start from the optimizer's design</button>
-      </div>
 
       <div id="inWarn"></div>
       <div class="run-row">
@@ -159,8 +160,8 @@ export function createDesigner(root, ctx) {
     }
     $$('#concSeg button', R).forEach(b => b.onclick = () => set({ conc: +b.dataset.v }));
     $$('#deckBtns button', R).forEach(b => b.onclick = () => set({ deck: +b.dataset.v }));
-    $('#pccR', R).oninput = (e) => set({ pcc: +e.target.value }, { quiet: true });
-    $('#pccR', R).onchange = (e) => set({ pcc: +e.target.value });
+    $$('#pccSeg button', R).forEach(b => b.onclick = () => set({ pcc: +b.dataset.v }));
+    $('#pccN', R).onchange = (e) => { let v = Math.round((+e.target.value || 50) / 5) * 5; v = Math.max(25, Math.min(90, v)); set({ pcc: v }); };
     $('#useSel', R).onchange = (e) => set({ use: +e.target.value });
     $$('#clearSeg button', R).forEach(b => b.onclick = () => set({ clear: +b.dataset.v }));
     $('#flN', R).onchange = (e) => set({ fl: Math.max(20, Math.min(2000, +e.target.value || 200)) });
@@ -185,14 +186,16 @@ export function createDesigner(root, ctx) {
     $$('#concSeg button', R).forEach(b => b.classList.toggle('on', +b.dataset.v === S.conc));
     $$('#deckBtns button', R).forEach(b => b.classList.toggle('on', +b.dataset.v === S.deck));
     $('#pccField', R).hidden = S.system !== 'composite';
-    $('#pccR', R).value = S.pcc;
-    $('#pccV', R).textContent = `${S.pcc} %${[25, 50, 75].includes(S.pcc) ? '' : ' · not a paper level'}`;
+    $$('#pccSeg button', R).forEach(b => b.classList.toggle('on', +b.dataset.v === S.pcc));
+    $('#pccN', R).value = S.pcc;
+    $('#pccV', R).textContent = [25, 50, 75].includes(S.pcc) ? '' : `${S.pcc} % · outside the study`;
     $('#useSel', R).value = S.use;
     const bu = window.__msveMeta?.systems?.composite?.building_uses?.[S.use];
-    $('#useInfo', R).innerHTML = bu ? `Live load ${bu[3]} psf · vibration live load ${bu[1]} psf · damping β = ${bu[4]} · limit ${bu[2]} %g` : '';
+    $('#useInfo', R).innerHTML = bu ? `From the solver's occupancy table: live load ${bu[3]} psf · DG 11 vibration live load ${bu[1]} psf · damping β = ${bu[4]} · tolerance ${bu[2]} %g. Damping is set by the occupancy (the published solver has no damping input).` : '';
     $$('#clearSeg button', R).forEach(b => b.classList.toggle('on', +b.dataset.v === S.clear));
     $('#flN', R).value = S.fl; $('#fwN', R).value = S.fw;
     $('#checkPick', R).hidden = S.mode !== 'check';
+    renderAssume();
     $('#autoChk', R).checked = !!S.auto;
     $('#plan', R).innerHTML = planSVG();
     if (S.mode === 'check' && shapes) { picker('#isPick', 'is'); picker('#gsPick', 'gs'); }
@@ -292,6 +295,10 @@ export function createDesigner(root, ctx) {
     const t0 = performance.now();
     $('#runBtn', root).disabled = true;
     $('#runBtn', root).innerHTML = '<span class="spinner"></span> Solving…';
+    if (result) {
+      root.querySelector('.designer').classList.add('is-stale');
+      if (!$('#staleB', root)) $('#dOut', root).insertAdjacentHTML('afterbegin', '<div class="stale-badge" id="staleB"><span class="spinner"></span>Recomputing — values below are for the previous inputs</div>');
+    }
     $('#vpOverlay', root).innerHTML = `<div class="solving"><span class="spinner"></span>Running the paper's ${S.system === 'composite' ? 'composite' : 'non-composite'} solver…</div>`;
     try {
       const sys = S.system;
@@ -321,6 +328,8 @@ export function createDesigner(root, ctx) {
       $('#runBtn', root).disabled = false;
       $('#runBtn', root).textContent = "Run the paper's solver";
       $('#vpOverlay', root).innerHTML = '';
+      root.querySelector('.designer').classList.remove('is-stale');
+      $('#staleB', root)?.remove();
       if (pending) run();
     }
   }
@@ -467,14 +476,18 @@ export function createDesigner(root, ctx) {
       <h3>${esc(STATE_SHORT[key])}${key === 'best' ? ' <span class="star">★</span>' : ''}</h3></div>
       ${pass ? '<span class="pill pass">✓ meets 0.5 %g</span>' : '<span class="pill fail">✗ exceeds limit</span>'}</div>
       ${S.mode === 'optimize' ? `<div class="small" style="margin-top:6px;color:var(--text2)">Lowest-carbon fix chosen by the solver: <b style="color:${METHOD_COLORS[method]}">${esc(methodTxt)}</b></div>` : ''}
-      ${S.mode === 'check' ? `<div class="small" style="margin-top:6px">Structural checks: ${structural ? '<span class="pill pass">all pass</span>' : '<span class="pill fail">fails — see Limit states</span>'}</div>` : ''}
+      ${S.mode === 'check' && key === 'check' ? (() => {
+        const f = calcInfo[res.system] ? C.failingChecks(calcInfo[res.system], v) : { structural: [], filters: [] };
+        return `<div class="small" style="margin-top:6px">Strength and deflection: ${structural ? '<span class="pill pass">all pass</span>' : `<span class="pill fail">${f.structural.length} fail</span> <span style="color:var(--text2)">${esc(f.structural.join(' · '))}</span>`}</div>` +
+          (f.filters.length ? `<div class="tiny muted" style="margin-top:4px">Not a structural failure: ${esc(f.filters.join('; ').toLowerCase())} — the optimizer would not have picked this pair.</div>` : '');
+      })() : ''}
       <div class="gauge" title="Peak acceleration vs the 0.5 %g tolerance limit (AISC DG 11)">
         <div class="gauge-track"><div class="gauge-limit" style="left:${limit / gmax * 100}%"></div><div class="gauge-mark" style="left:calc(${Math.min(100, summ.pa / gmax * 100)}% - 1px)"></div></div>
         <div class="gauge-lab"><span>0</span><span>limit ${limit} %g</span><span>${fmt(gmax, 2)} %g</span></div></div>
       <div class="kpis">
         <div class="kpi"><div class="k-l">Peak acceleration</div><div class="k-v">${fmtFixed(summ.pa, 3)}<span class="k-u">%g</span></div><div class="k-s">${fmtFixed(summ.pa / limit, 2)} × limit</div></div>
         <div class="kpi"><div class="k-l">Floor frequency</div><div class="k-v">${fmtFixed(summ.fn, 2)}<span class="k-u">Hz</span></div><div class="k-s">f<sub>j</sub> ${fmtFixed(v.fj, 2)} · f<sub>g</sub> ${fmtFixed(v.fg, 2)}</div></div>
-        <div class="kpi"><div class="k-l">Embodied carbon</div><div class="k-v">${fmtFixed(ec.v, 2)}<span class="k-u">${ec.u}</span></div><div class="k-s">${dEc === null ? ecBay(v.EC) + ' per bay' : `${dEc >= 0 ? '+' : ''}${fmtFixed(dEc, 1)} % vs initial`}</div></div>
+        <div class="kpi"><div class="k-l">Embodied carbon</div><div class="k-v">${fmtFixed(ec.v, 2)}<span class="k-u">${ec.u}</span></div><div class="k-s">${dEc === null ? ecBay(v.EC) + ' per bay' : `${dEc >= 0 ? '+' : ''}${fmtFixed(dEc, 1)} % carbon vs ${key === 'check' ? "optimizer's initial" : 'initial'}`}</div></div>
         <div class="kpi"><div class="k-l">Steel</div><div class="k-v">${fmtFixed(getUnits() === 'si' ? steelPsf * 4.8824 : steelPsf, getUnits() === 'si' ? 1 : 2)}<span class="k-u">${getUnits() === 'si' ? 'kg/m²' : 'psf'}</span></div><div class="k-s">${v.NumInfill} interior infills @ ${len.ft(v.infill_spacing, 2)}</div></div>
       </div></div>`;
 
@@ -486,10 +499,12 @@ export function createDesigner(root, ctx) {
       const na = !ss.applies || !res.captured[k];
       const why = na ? (k !== 'best' && res.states.initial?.['Peak Acceleration'] <= limit ? 'not needed — passes as built' : 'no passing design on this path') : '';
       const e = ecFromSolver(ss.ec);
-      html += `<button class="state${k === key ? ' on' : ''}${na ? ' na' : ''}" data-st="${k}" ${na ? 'disabled' : ''}>
+      const stillFails = !na && k !== 'initial' && k !== 'check' && ss.pa > limit;
+      const tipTxt = { initial: 'Sized for strength and deflection only, before any vibration mitigation', best: 'The lowest-carbon design that meets 0.5 %g', check: 'The infill and girder you picked, checked with the solver' }[k] || 'One mitigation path the solver tried';
+      html += `<button class="state${k === key ? ' on' : ''}${na ? ' na' : ''}" data-st="${k}" ${na ? 'disabled' : ''} title="${tipTxt}">
         <span class="s-name"><span class="dot" style="color:${STATE_COLOR[k]}"></span>${esc(STATE_SHORT[k])}${k === 'best' ? ' <span class="star">★</span>' : ''}${!na && ss.pa <= limit ? '' : ''}</span>
-        <span class="s-val">${na ? '' : `<b style="color:${ss.pa <= limit ? 'var(--pass)' : 'var(--fail)'}">${fmtFixed(ss.pa, 3)} %g</b>${fmtFixed(e.v, 2)} <span class="muted">${e.u.split('/')[0]}</span>`}</span>
-        <span class="s-mem">${na ? `<span class="muted" style="font-family:var(--font)">${why}</span>` : `${esc(ss.infill)} / ${esc(ss.girder)}${ss.add ? ` · +${ss.add}" topping` : ''}${ss.upsizes ? ` · ${ss.upsizes} upsizes` : ''}`}</span>
+        <span class="s-val">${na ? '' : `<b style="color:${ss.pa <= limit ? 'var(--pass)' : 'var(--fail)'}">${fmtFixed(ss.pa, 3)} %g</b>${fmtFixed(e.v, 2)} <span class="muted">${e.u}</span>`}</span>
+        <span class="s-mem">${na ? `<span class="muted" style="font-family:var(--font)">${why}</span>` : `<span class="muted" style="font-family:var(--font)">infill</span> ${esc(ss.infill)} <span class="muted" style="font-family:var(--font)">girder</span> ${esc(ss.girder)}${ss.add ? ` · +${ss.add}" topping` : ''}${ss.upsizes ? ` · ${ss.upsizes} upsizes` : ''}${stillFails ? '<br><span style="color:var(--fail);font-family:var(--font)">✗ ran out of larger shapes — still above the limit</span>' : ''}`}</span>
       </button>`;
     }
     html += `</div></div></div>`;
@@ -528,12 +543,12 @@ export function createDesigner(root, ctx) {
     const memRow = (lab, mm) => {
       const d = shapes.byName[mm.name] || {};
       return `<tr><td>${lab}</td><td><b class="mono">${esc(mm.name)}</b><div class="tiny muted">d ${d.d}" · b<sub>f</sub> ${d.bf}" · t<sub>f</sub> ${d.tf}" · t<sub>w</sub> ${d.tw}" · ${d.W} lb/ft</div>
-        ${res.system === 'composite' ? `<div class="tiny">${fmt(mm.studs, 0)} studs (¾" × ${m.hr + 1.5}")${mm.perRib > 1 ? `, ${mm.perRib} per rib` : ''}${mm.camber ? ` · camber ${mm.camber}"` : ' · no camber'}</div>` : ''}</td></tr>`;
+        ${res.system === 'composite' ? `<div class="tiny">${fmt(mm.studs, 0)} studs (¾" × ${m.hr + 1.5}")${mm.perRib > 1 ? (lab === 'Girders' ? `, ${mm.perRib} side by side` : `, ${mm.perRib} per rib`) : ''}${mm.camber ? ` · camber ${mm.camber}"` : ' · no camber'}</div>` : ''}</td></tr>`;
     };
     html += `<div class="card" style="margin-top:12px"><div class="card-h">Members and slab</div><div class="card-b"><table class="member-table">
       ${memRow('Infill beams', m.infill)}${memRow('Girders', m.girder)}
       <tr><td>Deck</td><td>${esc(v.selected_deck || '')}<div class="tiny muted">deck ${fmt(v.selected_deck_SW, 2)} psf · slab ${fmt(v.Final_Slab_SW, 1)} psf</div></td></tr>
-      <tr><td>Topping</td><td>${fmt(v.selected_deck_topping_thickness, 2)}"${v.Additional_Topping ? ` + ${v.Additional_Topping}" added` : ''} over ${v.Deck_Type}" ribs · ${v.Conc_Type === 'LW' ? 'lightweight' : 'normal-weight'}</td></tr>
+      <tr><td>Slab</td><td><b>${fmt(v.Deck_Type + v.selected_deck_topping_thickness + (v.Additional_Topping || 0), 2)}" total</b> = ${v.Deck_Type}" ribs + ${fmt(v.selected_deck_topping_thickness, 2)}" above${v.Additional_Topping ? ` + ${v.Additional_Topping}" added topping` : ''} · ${v.Conc_Type === 'LW' ? 'lightweight' : 'normal-weight'}</td></tr>
       <tr><td>Framing</td><td>${v.NumInfill} interior infills at ${fmt(v.infill_spacing, 3)} ft</td></tr></table></div></div>`;
 
     // validation summary
@@ -547,7 +562,8 @@ export function createDesigner(root, ctx) {
       <button class="btn btn-ghost" id="jsonBtn" title="Every captured value as JSON">JSON</button></div>
       <div class="tiny muted" style="margin-top:10px">Engine: <code>${esc(res.engine.notebook)}</code> solver cell, SHA-256 ${esc(res.engine.solver_cell_sha256.slice(0, 12))}… · Python ${esc(res.engine.python)}, numpy ${esc(res.engine.numpy)}, pandas ${esc(res.engine.pandas)}</div>`;
 
-    out.innerHTML = html;
+    out.innerHTML = `<div class="stale-dim">${html}</div>`;
+    renderAssume();
     $$('.state', out).forEach(b => b.onclick = () => { if (b.disabled) return; S.view = b.dataset.st; writeHash(); renderAll(); });
     $('#repBtn', out).onclick = () => openReport({ result, key: sel(), calcInfo: calcInfo[result.system], shapes, snapshot: bay.snapshot(), model: modelFor(result, sel()) });
     $('#shareBtn', out).onclick = async () => { try { await navigator.clipboard.writeText(location.href); toast('Link copied — it reopens this exact design.'); } catch { toast(location.href); } };
@@ -565,10 +581,34 @@ export function createDesigner(root, ctx) {
     if (va) html += line(va.all_ok, `<b>${va.n_ok}/${va.n}</b> reported outputs reproduced from captured internals${va.n_known_quirk ? ` (+${va.n_known_quirk} known reporting quirk)` : ''}`);
     if (rc) html += line(rc.n_bad === 0, `<b>${rc.n_ok}</b> solver lines re-run at this pair reproduce their values${rc.n_bad ? `, <b>${rc.n_bad}</b> differ` : ''}`);
     if (sp) html += line(sp.ok, 'carbon parts sum to the solver\'s EC');
-    if (mt) html += line(mt.nOk === mt.n, `<b>${mt.nOk}/${mt.n}</b> values match the published dataset (row ${mt.row + 1})`);
+    if (mt) html += line(mt.nOk === mt.n, `<b>${mt.nOk}/${mt.n}</b> values of the optimizer's states match the published dataset (row ${mt.row + 1})${key === 'check' ? ' — your own pair is not in the dataset' : ''}`);
     else html += line(null, 'published dataset: these inputs are outside the paper\'s grid');
     html += `<button class="btn btn-sm btn-ghost" data-goto-tab="valid" style="margin-top:6px">Details</button></div></div>`;
     return html;
+  }
+
+  // ------------------------------------------------------------------ fixed assumptions (not inputs)
+  function renderAssume() {
+    const el = $('#assume', root);
+    const k = sel();
+    if (!el) return;
+    if (!result?.ok || !k) { el.innerHTML = ''; return; }
+    const v = result.captured[k].values;
+    const comp = result.system === 'composite';
+    const lw = v.Conc_Type === 'LW';
+    const rows = [
+      ['Infill spacing', `${fmt(v.infill_spacing, 3)} ft (${v.NumInfill} interior infills), from the deck table`],
+      ['Deck / slab', `${esc(v.selected_deck)}; ${fmt(v.Deck_Type + v.selected_deck_topping_thickness + (v.Additional_Topping || 0), 2)} in total depth`],
+      comp ? ['Studs', `¾ in, F<sub>u</sub> = 65 ksi; infill ${fmt(v.min_req_studs_II, 0)}, girder ${fmt(v.min_req_studs_IG, 0)} (sized for the composite action)`] : null,
+      ['Materials', `F<sub>y</sub> = ${v.Fy} ksi, E<sub>s</sub> = ${fmt(v.Es, 0)} ksi, f'<sub>c</sub> = ${v.f_prime_c} ksi, ${lw ? 'LWC 110' : 'NWC 145'} pcf`],
+      ['Loads', `LL ${v.LL} psf, SDL ${v.SDL} psf, construction LL 20 psf; LRFD 1.4D and 1.2D + 1.6L`],
+      ['Construction', comp ? 'unshored: bare steel carries the wet concrete; camber 0.8 × construction deflection (¼ in steps, spans ≥ 24 ft)' : 'non-composite beams; deck braces the infill top flange'],
+      ['Vibration (DG 11)', `vibration LL ${v.live_load_vibrations} psf + ${fmt(v.dead_load, 0)} psf; β = ${v.DR}; limit ${v.tolerance_limit} %g; W<sub>j</sub> × 1.5 (continuous infills)`],
+    ].filter(Boolean);
+    const body = `<table>${rows.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('')}</table>`;
+    el.innerHTML = S.mode === 'check'
+      ? `<div class="assume"><div class="field-label" style="margin-bottom:4px"><span>Fixed by the solver (not inputs)</span></div>${body}</div>`
+      : `<details class="assume"><summary class="small" style="cursor:pointer;font-weight:600;color:var(--text2)">Fixed by the solver (not inputs)</summary>${body}</details>`;
   }
 
   // ------------------------------------------------------------------ viewport tools + HUD
@@ -654,7 +694,7 @@ export function createDesigner(root, ctx) {
     const badge = (t) => {
       if (!cap) return '';
       if (t === 'valid') { const ok = cap.validation?.all_ok !== false && (cap.recheck?.n_bad || 0) === 0; return `<span class="badge ${ok ? 'pass' : 'fail'}">${ok ? '✓' : '!'}</span>`; }
-      if (t === 'limits' && calcInfo[result.system]) { const ok = C.structuralPass(calcInfo[result.system], cap.values); return `<span class="badge ${ok ? 'pass' : 'fail'}">${ok ? '✓' : '✗'}</span>`; }
+      if (t === 'limits' && calcInfo[result.system]) { const ok = C.structuralPass(calcInfo[result.system], cap.values) && cap.values.vibration_check !== false; return `<span class="badge ${ok ? 'pass' : 'fail'}" title="${ok ? 'all checks pass' : 'a strength, deflection or vibration check fails'}">${ok ? '✓' : '✗'}</span>`; }
       return '';
     };
     tabs.innerHTML = TABS.map(([id, t]) => `<button data-tab="${id}" class="${tab === id ? 'on' : ''}">${t}${badge(id)}</button>`).join('') +
