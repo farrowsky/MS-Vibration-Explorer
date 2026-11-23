@@ -93,9 +93,11 @@ the solver.
 
 ```
 engine/paper/      the release's two notebooks and two tables (unmodified) + SHA256SUMS
-server/            engine.py (load, run, capture, validate), calcmap.py (calc sections), app.py (FastAPI)
-web/               static front end (no build step): index.html, css/, js/, vendor/three.js r170, data/, assets/figures/
-tools/             build_web_data.py (packs the published datasets and figures), verify_release.py
+server/            engine.py (load, run, capture, validate), calcmap.py (calc sections), service.py (the API as plain
+                   functions), app.py (FastAPI wrapper)
+web/               static front end (no build step): index.html, css/, js/, js/engine/ (in-browser solver), vendor/three.js r170,
+                   data/, assets/figures/
+tools/             build_web_data.py (packs the published datasets and figures), build_pages.py (static site), verify_release.py
 tests/             pytest suite: provenance, capture validation, published-dataset agreement, API
 docs/              METHOD.md, MODEL.md (3D geometry), DEPLOY.md (hosting)
 ```
@@ -117,7 +119,13 @@ python tools/verify_release.py --release ../MS-Vibration-Code --n 200    # large
 
 ## Hosting
 
-One small Python service serves both the API and the static site. The solver peaks at about 0.4 GB per run, so the server
+**Free, no server (GitHub Pages).** `python tools/build_pages.py` builds a static site in which the paper's solver runs in
+the visitor's browser with [Pyodide](https://pyodide.org) (Python compiled to WebAssembly), through the same
+`server/engine.py` and `server/service.py`. The first design takes about 25 s while the browser loads Python and numpy;
+later ones take a few seconds. The results are bit-identical to the server's, and the four validations run as usual.
+`.github/workflows/pages.yml` publishes it on every push to `main`. See [docs/DEPLOY.md](docs/DEPLOY.md).
+
+**Server.** One small Python service serves both the API and the static site. The solver peaks at about 0.4 GB per run, so the server
 runs **one solve at a time** with a short queue (busy → HTTP 503, and the page retries), and keeps an LRU cache of finished
 designs. A 1 GB instance is comfortable. The Design Space module is fully static and also works when the front end is
 hosted separately (set `window.MSVE_API` and `MSVE_ALLOW_ORIGIN`). See [docs/DEPLOY.md](docs/DEPLOY.md).

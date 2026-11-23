@@ -1,11 +1,36 @@
+# Python
 __pycache__/
 *.py[cod]
 .venv/
 venv/
+env/
 .pytest_cache/
+.coverage
+htmlcov/
 .ipynb_checkpoints/
+
+# Build output and runtime caches.
+# site/ is made by tools/build_pages.py and published by .github/workflows/pages.yml.
+# cache/ is MSVE_CACHE_DIR, if pointed inside the repo.
+site/
 cache/
 *.tmp
+*.log
+node_modules/
+
+# Secrets and local settings: never commit.
+# .claude/ holds Claude Code session files with absolute local paths.
+.env
+.env.*
+*.pem
+*.key
+.claude/
+.vscode/
+.idea/
+
+# OS and editor clutter
 .DS_Store
 Thumbs.db
-.claude/
+desktop.ini
+*.swp
+*~

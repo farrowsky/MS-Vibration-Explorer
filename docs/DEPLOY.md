@@ -1,6 +1,40 @@
 # Hosting
 
-The tool is one small Python web service (FastAPI + uvicorn) that serves the API and the static front end.
+Two ways to host the tool: as a **static site** where the solver runs in the visitor's browser (free, e.g. GitHub
+Pages), or as one small **Python web service** (FastAPI + uvicorn) that serves the API and the front end.
+
+## Static site (GitHub Pages, no server)
+
+```bash
+python tools/build_pages.py                  # writes site/
+python -m http.server -d site 8080           # preview at http://localhost:8080
+```
+
+`site/` is `web/` plus:
+
+* `py/`: the in-browser engine's files: `server/{engine,calcmap,service}.py` and the release's notebooks and tables
+  (checked against `engine/paper/SHA256SUMS` at build time, and against the build's `py/manifest.json` hashes in the
+  browser);
+* `api/`: the answers that never change (meta, calc maps, solver source) as JSON, written by the same
+  `server/service.py` functions the server uses;
+* `index.html` with `window.MSVE_ENGINE = 'browser'`, which makes `web/js/lib/api.js` send designs to
+  `web/js/engine/worker.js` instead of `/api/design`.
+
+The worker loads [Pyodide](https://pyodide.org) from the jsDelivr CDN (version in `web/js/engine/version.js`; 0.29.x =
+Python 3.13, numpy 2.2, pandas 2.3), writes the engine files into its virtual file system and calls
+`service.design_json()`. Nothing else changes: the published notebooks are `exec`'d unmodified, `sys.monitoring`
+captures the calculation and the four validations run in the browser.
+
+* **Speed:** the first design downloads Python, numpy and pandas (about 25 s on a fast connection; the browser caches
+  them afterwards). Later designs take 3–12 s, and repeats are instant (in-memory cache).
+* **Checked:** designs computed in the browser and natively agree bit for bit (members, peak acceleration, frequency,
+  carbon, studs, camber, every validation count). After changing the Pyodide version, compare a few designs again,
+  including one on the published grid (the Validation tab shows the dataset comparison).
+
+**GitHub Pages.** `.github/workflows/pages.yml` builds and publishes `site/` on every push to `main`. Turn it on once:
+repository **Settings → Pages → Source: GitHub Actions**. On a free GitHub plan, Pages needs a public repository.
+
+## Python service
 
 ## Sizing
 
