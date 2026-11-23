@@ -1,6 +1,7 @@
 // App shell: routing, theme, units, disclaimer, About page.
 import { $, $$, esc, toast, store } from './lib/dom.js';
-import { api } from './lib/api.js';
+import { api, IN_BROWSER } from './lib/api.js';
+import { PYODIDE_VERSION } from './engine/version.js';
 import { setUnits, getUnits } from './lib/units.js';
 import { createDesigner } from './designer/designer.js';
 
@@ -151,7 +152,9 @@ async function renderAbout() {
       rows.push(`<tr><td>${s === 'composite' ? 'Composite' : 'Non-composite'} solver</td><td><code>${esc(p.notebook)}</code><br>notebook SHA-256 <code>${esc(p.notebook_sha256)}</code><br>solver cell SHA-256 <code>${esc(p.solver_cell_sha256)}</code></td></tr>`);
     }
     const p = meta.systems.composite.provenance;
-    rows.push(`<tr><td>Server runtime</td><td>Python ${esc(p.python)}, numpy ${esc(p.numpy)}, pandas ${esc(p.pandas)} · tool ${esc(meta.version)}</td></tr>`);
+    rows.push(IN_BROWSER
+      ? `<tr><td>Runtime</td><td>Runs in your browser: Python compiled to WebAssembly (Pyodide ${esc(PYODIDE_VERSION)}). The Python, numpy and pandas versions are listed under each design. · tool ${esc(meta.version)}</td></tr>`
+      : `<tr><td>Server runtime</td><td>Python ${esc(p.python)}, numpy ${esc(p.numpy)}, pandas ${esc(p.pandas)} · tool ${esc(meta.version)}</td></tr>`);
     rows.push(`<tr><td>Design-space data</td><td><code>data/imperial/composite_results_imperial.csv</code> (30,258 rows) and <code>noncomposite_results_imperial.csv</code> (10,086 rows) from the MS-Vibration-Code release, packed without changing values</td></tr>`);
     $('#provTable').innerHTML = rows.join('');
     $('#quirks').innerHTML = meta.known_quirks.map(q => `<p><b>${esc(q.state)} · ${esc(q.column)}</b> — ${esc(q.note)}</p>`).join('');

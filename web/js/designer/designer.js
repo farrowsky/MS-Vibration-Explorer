@@ -345,6 +345,11 @@ export function createDesigner(root, ctx) {
 
   // ------------------------------------------------------------------ solver
   const runSoon = debounce(() => run(), 650);
+  // static build: the in-browser engine reports what it is doing (loading Python, then solving)
+  window.addEventListener('msve-engine', (e) => {
+    const o = $('#vpOverlay .solving', root);
+    if (o && !e.detail.ready) o.lastChild.textContent = e.detail.text;
+  });
 
   function autoBeams() {
     const smax = window.__msveMeta?.systems?.[S.system]?.spacing_lookup?.[`${S.conc}|${S.deck}`] || 10;
