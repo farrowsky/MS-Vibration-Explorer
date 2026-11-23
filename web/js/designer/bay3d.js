@@ -83,6 +83,7 @@ function patchDisplacement(mat, U, { ripple = false } = {}) {
       }`);
   };
   mat.customProgramCacheKey = () => 'bayDisp' + (ripple ? 'R' : '');
+  mat.userData.disp = true;          // meshes using it get the displaced shadow material too (setModel)
   return mat;
 }
 
@@ -269,6 +270,9 @@ export class Bay3D {
       capSteel: std({ color: 0xf0a640, emissive: 0x6a3f0c, roughness: 0.6, side: THREE.DoubleSide }),
     };
     for (const k of ['girder', 'infill', 'edge', 'deck', 'conc', 'stud', 'hl']) this.mat[k].clippingPlanes = [this.clipPlane];
+    // shadows are drawn with a depth material: give it the same displacement, so shadows move with the floor
+    this.mat.depthDisp = patchDisplacement(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), U);
+    this.mat.depthDisp.clippingPlanes = [this.clipPlane];
     this.mat.conc.polygonOffset = true;
     this.mat.conc.polygonOffsetFactor = 1;
 
@@ -583,6 +587,9 @@ export class Bay3D {
     this._label(new THREE.Vector3(Lg * 0.62, top + 0.2, 0), `<span style="color:#FCAE2E">●</span> Girder ${m.girder.name}${studTxt(m.girder, true)}${camTxt(m.girder)}`, 'girder');
     this._label(new THREE.Vector3(mid, top + 0.2, Lj * 0.5), `<span style="color:#85C1E9">●</span> Infill ${m.infill.name}${studTxt(m.infill)}${camTxt(m.infill)}`, 'infill');
     this._label(new THREE.Vector3(Lg * 0.18, top + 0.2, Lj * 0.85), `${m.deckLabel || hr + '" deck'} <small>· ${fmt2(hr + m.tc + (m.add || 0))}" slab total</small>`, 'deck');
+
+    // shadows follow the vibration: displaced shadow-casters render their shadow with the displaced depth material
+    this.root.traverse(o => { if (o.isMesh && o.castShadow && o.material?.userData?.disp) o.customDepthMaterial = this.mat.depthDisp; });
 
     this._applyLayers();
     this.setSection(this.cut);
