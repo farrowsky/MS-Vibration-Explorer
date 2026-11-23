@@ -4,6 +4,7 @@ import { esc } from '../lib/dom.js';
 import { fmt, fmtFixed, LB_TO_KG, FT2_PER_M2, FT_TO_M } from '../lib/units.js';
 import { METHOD_LABELS } from '../lib/colormap.js';
 import * as C from './calcs.js';
+import { calcItemHTML } from './calcpanel.js';
 
 const NAMES = { initial: 'Initial design', infill: 'Mitigated: upsize infills', girder: 'Mitigated: upsize girders', conc: 'Mitigated: add topping', steel: 'Mitigated: upsize infills + girders', best: 'Best (lowest-carbon passing)', check: 'User-selected members' };
 
@@ -40,7 +41,39 @@ td.v{text-align:right;font-weight:600;white-space:nowrap} td.u{color:var(--muted
 @media print{body{background:#fff}.toolbar{display:none}.page{padding:0;max-width:none}h2{break-after:avoid}.pagebreak{break-before:page}
   .runfoot{position:fixed;bottom:-10mm;left:0;right:0;font-size:8.5px;color:#6a7988;text-align:center}}
 .runfoot{display:none} @media print{.runfoot{display:block}}
+/* Mathcad-style regions (same renderer as the app's Calculations panel) */
+:root{--info:#2f6db5;--font:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--mono:Consolas,Menlo,monospace}
+.calc-item{break-inside:avoid;margin:0 0 8px;padding:0 0 8px;border-bottom:1px dotted var(--line)}
+.ci-h{display:flex;gap:8px;align-items:baseline;margin:0 0 4px;font-size:11px}
+.ci-h b{font-weight:650} .ci-h .spacer{flex:1}
+.mc-wrap{overflow-x:auto;padding:7px 10px;background:#fcfdfe;border:1px solid var(--line);border-radius:4px}
+.mc{display:grid;grid-template-columns:auto auto 1fr;column-gap:.35em;row-gap:8px;align-items:center;width:max-content;min-width:100%;font-family:"Cambria Math","STIX Two Math",Cambria,"Times New Roman",Georgia,serif;font-size:13.5px;line-height:1.25;color:var(--text)}
+.mc-a{justify-self:end;white-space:nowrap} .mc-o{color:var(--text2);white-space:nowrap;padding:0 .1em} .mc-b{white-space:nowrap}
+.mc i{font-style:italic} .mc sub{font-size:.68em;vertical-align:-.38em;font-style:normal;line-height:0} .mc sup{font-size:.72em;vertical-align:.62em;line-height:0}
+.mo{margin:0 .2em} .mf{font-style:normal} .ms{font-family:var(--mono);font-size:.78em} .mq{white-space:nowrap}
+.mu{font-family:var(--font);font-size:.74em;color:var(--info);margin-left:.25em;font-style:normal} .mres{font-weight:700}
+.mfr{display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center;margin:0 .1em} .mnu{padding:0 .25em .12em} .mde{padding:.14em .25em 0;border-top:1px solid currentColor}
+.mrad{display:inline-flex;align-items:stretch;vertical-align:middle} .mrs{align-self:flex-end;padding-right:.04em}
+.mrad.tall .mrs{font-size:1.9em;line-height:1;transform:scaleX(.75);transform-origin:right bottom} .mrb{border-top:1px solid currentColor;padding:.1em .15em 0;margin-top:.14em}
+.mpar{display:inline-flex;align-items:stretch;vertical-align:middle} .mpl,.mpr{width:.3em;flex:0 0 .3em}
+.mpl{border-left:1.3px solid currentColor;border-radius:.6em 0 0 .6em/50% 0 0 50%;margin-right:.08em} .mpr{border-right:1.3px solid currentColor;border-radius:0 .6em .6em 0/0 50% 50% 0;margin-left:.08em}
+.mceil,.mflr{display:inline-block;border-left:1.2px solid currentColor;border-right:1.2px solid currentColor;padding:0 .22em;margin:0 .1em} .mceil{border-top:1.2px solid currentColor} .mflr{border-bottom:1.2px solid currentColor}
+.mvec{display:inline-flex;flex-direction:column;vertical-align:middle;border-left:1.2px solid currentColor;border-right:1.2px solid currentColor;border-radius:2px;padding:0 .35em;line-height:1.15;font-size:.92em;text-align:right}
+.mix{font-size:.62em!important} .mpill{font-family:var(--font);font-size:9.5px}
+.mc-src{font-size:9px;color:var(--muted);margin:3px 2px 0;line-height:1.4} .mc-src .mc-ln{font-family:var(--mono);margin-right:4px;color:var(--muted)}
+.mc-py{font-size:8.5px;color:var(--text2);word-break:break-word}
+.mc-part{margin-bottom:6px} .mc-pt{font-size:8.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:2px 0 3px;font-weight:700}
+.mc-util{display:flex;align-items:center;gap:8px;font-size:10px;margin-top:3px} .mc-util .ratio-bar{flex:1;max-width:220px}
+@media print{.mc-wrap{overflow:visible;background:#fff}}
 `;
+
+// fit any region wider than the page (on screen and when printing)
+const FIT_JS = `function fitMc(){document.querySelectorAll('.mc-wrap').forEach(function(w){var m=w.firstElementChild;if(!m)return;m.style.zoom='';m.style.minWidth='0';var avail=w.clientWidth-20,need=m.scrollWidth;m.style.minWidth='';if(need>avail+1&&avail>0)m.style.zoom=(avail/need).toFixed(3);});}
+window.addEventListener('load',fitMc);window.addEventListener('resize',fitMc);window.addEventListener('beforeprint',fitMc);window.addEventListener('afterprint',fitMc);`;
+
+function calcBlock(title, side, body) {
+  return `<div class="calc-item"><div class="ci-h"><b>${title}</b><span class="spacer"></span>${side || ''}</div>${body}</div>`;
+}
 
 function inputsTable(res) {
   const i = res.inputs, r = res.request;
@@ -84,22 +117,30 @@ export function buildReport({ result: res, key, calcInfo, shapes, snapshot, mode
     const d = shapes.byName[mm.name] || {};
     return `<tr><td class="muted" style="width:22%">${lab}</td><td><b><code>${esc(mm.name)}</code></b> — d ${d.d} in, b<sub>f</sub> ${d.bf} in, t<sub>f</sub> ${d.tf} in, t<sub>w</sub> ${d.tw} in, ${d.W} lb/ft, I<sub>x</sub> ${d.Ix} in⁴${res.system === 'composite' ? `<br>${fmt(mm.studs, 0)} × ¾ in studs${mm.perRib > 1 ? ` (${mm.perRib} per rib)` : ''}, camber ${mm.camber || 0} in` : ''}</td></tr>`;
   };
-  const secs = C.renderSections(calcInfo, cap, { lines: calcInfo.linesByVar });
-  // appendix: every curated value with its code line
+  // Mathcad-style regions: checks (section 3), DG 11 (section 4), everything else (appendix A)
+  const varBlock = (it) => calcBlock(`${esc(it.label)}${it.member ? ` <span class="muted">(${it.member})</span>` : ''}`,
+    `<code class="muted">${esc(it.var)}</code>`, calcItemHTML({ kind: 'var', it }, calcInfo, cap));
+  let checkCalcs = '';
+  for (const grp of ['infill', 'girder']) {
+    const items = calcInfo.checks[grp].filter(c => c.flag in v);
+    if (!items.length) continue;
+    checkCalcs += `<h3>${grp === 'infill' ? 'Infill beam' : 'Girder'}</h3>`;
+    for (const c of items) {
+      const r = C.checkRow(c, v);
+      const pill = r.unknown ? '<span class="pill">n/a</span>' : r.pass ? '<span class="pill pass">pass</span>' : '<span class="pill fail">fail</span>';
+      checkCalcs += calcBlock(esc(r.c.label), `<span class="muted tiny">${esc(c.clause)}</span> ${pill}`, calcItemHTML({ kind: 'check', c, grp }, calcInfo, cap));
+    }
+  }
+  const vibSec = calcInfo.sections.find(s => s.id === 'vibration');
+  const vibCalcs = vibSec ? vibSec.items.filter(it => it.var in v).map(varBlock).join('') : '';
   let appx = '';
   for (const sec of calcInfo.sections) {
+    if (sec.id === 'vibration') continue;
     const items = sec.items.filter(it => it.var in v);
     if (!items.length) continue;
-    appx += `<div class="calc-sec"><h3>${esc(sec.title)}</h3><div class="blurb">${esc(sec.blurb)}</div><table><tbody>`;
-    for (const it of items) {
-      const val = it.member ? C.pickMember(v[it.var], it.member) : v[it.var];
-      const line = C.findLine(calcInfo.linesByVar, it.var, cap);
-      const code = (calcInfo.assignments[it.var] || []).find(c => c.line === line) || (calcInfo.assignments[it.var] || []).slice(-1)[0];
-      appx += `<tr><td style="width:30%">${esc(it.label)} <span class="muted">${it.symbol || ''}</span><div class="tiny muted"><code>${esc(it.var)}</code></div></td><td class="v" style="width:16%">${C.valueHTML(val, it.member ? 's' : cap.orient[it.var])} <span class="muted" style="font-weight:400">${it.unit || ''}</span></td>
-        <td>${code ? `<div class="code-line"><span class="ln">L${code.line}</span>${esc(code.code)}</div>` : '<span class="muted tiny">input</span>'}</td><td class="chk">${line ? C.recheckIcon(rc, line) : ''}</td></tr>`;
-    }
-    appx += '</tbody></table></div>';
+    appx += `<div class="calc-sec"><h3>${esc(sec.title)}</h3><div class="blurb">${esc(sec.blurb)}</div>${items.map(varBlock).join('')}</div>`;
   }
+  const mcNote = `<div class="small muted" style="margin:0 0 8px">Each calculation is the solver's own notebook line, set out three ways: in symbols (:=), with the captured inputs and their units substituted, and the captured value. Nothing is recomputed for the report. Numbers written into a line (12, 144, 1000, 1728, 386 …) are the solver's unit conversions. ✓ = re-running that exact line on these inputs reproduces the value. L-numbers refer to the notebook's solver cell.</div>`;
   const disc = `<div class="disc"><b>Research showcase — not for design.</b> Generated by MS Vibration Explorer, the companion tool to <i>Carbon-Efficient Design Strategies for Mitigating Footfall Vibration in Steel Framed Floor Systems</i> (Farrow, Brown and Solnosky). It reproduces the study's published solver for one bay under the study's assumptions. It is not a structural design, check or professional opinion, must not be used to design or approve any structure, and is provided "as is" without warranty under the MIT License; the authors and their institution accept no liability for any use.</div>`;
 
   const doc = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Calc report — ${esc(title)}</title><style>${CSS}</style></head><body>
@@ -125,8 +166,9 @@ ${snapshot ? `<div style="margin-top:10px"><img class="snap" src="${snapshot}" a
 <h3>All design states</h3>${statesTable(res)}</div>
 
 <div class="sec pagebreak"><h2>3 · Strength, deflection and selection checks</h2>${C.renderChecks(calcInfo, cap, res.inputs, { mode: res.mode })}</div>
+<div class="calc-sec"><h3 style="margin-top:16px">3.1 · Check calculations</h3>${mcNote}${checkCalcs}</div>
 
-<div class="sec"><h2>4 · Floor vibration — AISC Design Guide 11 (walking)</h2>${C.renderChain(cap, calcInfo)}</div>
+<div class="calc-sec pagebreak"><h2>4 · Floor vibration — AISC Design Guide 11 (walking)</h2><div class="small muted" style="margin-bottom:6px">Chapter 4 walking-excitation procedure as coded in the solver (paper Fig. 4), in the solver's order.</div>${vibCalcs}</div>
 
 <div class="sec"><h2>5 · Embodied carbon take-off</h2>
 <div class="code-line">${esc(sp.line)}</div>
@@ -146,14 +188,14 @@ ${va && va.checks.some(c => c.known_quirk && c.ok === false) ? `<div class="smal
 <tr><td class="muted">Runtime</td><td>Python ${esc(res.engine.python)}, numpy ${esc(res.engine.numpy)}, pandas ${esc(res.engine.pandas)}</td></tr>
 <tr><td class="muted">Selected pair</td><td>infill index ${cap.r}, girder index ${cap.c} in the solver's 273 × 273 W-shape matrices${cap.additional_topping ? `; additional topping ${cap.additional_topping} in` : ''}</td></tr></table></div>
 
-<div class="sec pagebreak"><h2>Appendix A · Calculation listing</h2><div class="small muted" style="margin-bottom:6px">Each quantity with the notebook line that computed it. ✓ = re-running that line on the captured inputs reproduces the value.</div>${appx}</div>
+<div class="calc-sec pagebreak"><h2>Appendix A · Calculations by section</h2>${mcNote}${appx}</div>
 
 <div class="sec pagebreak"><h2>Appendix B · Every captured engine variable</h2>${C.renderAllVars(cap)}</div>
 
 <div class="foot">${disc}
 Cite: S. D. Farrow, N. C. Brown, R. L. Solnosky, <i>Carbon-Efficient Design Strategies for Mitigating Footfall Vibration in Steel Framed Floor Systems</i>, Engineering Structures (under review). Code and data: MS-Vibration-Code (MIT License).</div>
 </div>
-<script>document.getElementById('dl').onclick=function(){var a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['<!doctype html>'+document.documentElement.outerHTML],{type:'text/html'}));a.download=${JSON.stringify(`calc_report_${res.system}_${res.inputs.Girder_Span}x${res.inputs.Infill_Span}_${key}.html`)};a.click();};<\/script>
+<script>${FIT_JS}document.getElementById('dl').onclick=function(){var a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['<!doctype html>'+document.documentElement.outerHTML],{type:'text/html'}));a.download=${JSON.stringify(`calc_report_${res.system}_${res.inputs.Girder_Span}x${res.inputs.Infill_Span}_${key}.html`)};a.click();};<\/script>
 </body></html>`;
   return doc;
 }

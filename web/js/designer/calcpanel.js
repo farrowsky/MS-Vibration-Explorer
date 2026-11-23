@@ -162,6 +162,10 @@ function itemBody(item, ci, cap) {
   return html;
 }
 
+// for the calc report: the same regions, static
+//   item: { kind: 'var', it: calcmap item } or { kind: 'check', c: calcmap check, grp }
+export function calcItemHTML(item, ci, cap) { return itemBody(item, ci, cap); }
+
 // ---------------------------------------------------------------------------
 /**
  * mountCalcs(el, { ci, cap, mode, state, onSource(line), onMissingVar(name) })
