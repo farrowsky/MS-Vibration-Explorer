@@ -391,6 +391,12 @@ export class Bay3D {
     U.uLg.value = Lg; U.uLj.value = Lj;
     U.uOrigin.value.set(-Lg / 2, -Lj / 2);
     this.root.position.set(-Lg / 2, 0, -Lj / 2);
+    // fit the sun's shadow camera to this bay (three.js defaults to a 10 x 10 box, which shadowed only the middle)
+    const sc = this.sun.shadow.camera, half = 0.5 * Math.hypot(Lg, Lj) + 4;
+    sc.left = -half; sc.right = half; sc.top = half; sc.bottom = -half;
+    sc.near = 1; sc.far = this.sun.position.length() + half * 2;
+    sc.updateProjectionMatrix();
+    this.sun.shadow.needsUpdate = true;
     const vib = m.vib || {};
     U.uDj.value = Number.isFinite(vib.dj) ? vib.dj : 0.5;
     U.uDg.value = Number.isFinite(vib.dg) ? vib.dg : 0.5;
