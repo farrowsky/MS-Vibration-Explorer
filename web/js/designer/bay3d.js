@@ -902,9 +902,12 @@ export class Bay3D {
     this.walker = g;
     this.root.add(g);
     this.walkState = { s: 0, lastStep: 0, side: 1, resp: 0, prints: [] };
+    if (this.floorMode === 'concrete') this.setFloorMode('accel');   // the walk is shown on the Peak accel. overlay
   }
   _stopWalk() {
     if (this.walker) { this.root.remove(this.walker); this.walker = null; }
+    if (this.model) this.floorU.uAp.value = this.model.vib?.ap || 0;   // back to the solver's a_p
+    this.liveAccel = 0;
     (this.walkState.prints || []).forEach(p => { this.root.remove(p.mesh); p.mesh.geometry.dispose(); });
     this.walkState.prints = [];
   }
@@ -977,6 +980,9 @@ export class Bay3D {
     const target = this.phiAt(x, z);
     W.resp += (target - W.resp) * Math.min(1, dt * 1.8);
     this.liveAccel = (vib.ap || 0) * W.resp;
+    // the Peak accel. overlay follows the walker: a_p x phi(walker) x phi(x, z). With the walker at mid-bay and the
+    // response built up it is exactly the static DG 11 picture (the solver's a_p); it never exceeds it.
+    this.floorU.uAp.value = this.liveAccel;
     this.opts.onWalk?.({ x, z, resp: W.resp, accel: this.liveAccel });
     return W.resp;
   }
