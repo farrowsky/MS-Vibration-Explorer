@@ -300,6 +300,20 @@ select:focus, .text-in:focus { border-color: var(--accent); }
 .gauge-limit { position: absolute; top: -3px; bottom: -3px; width: 0; border-left: 2px dashed var(--text); opacity: .7; }
 .gauge-lab { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 4px; }
 
+/* quick result card: top of the inputs, only where the results panel is a drawer or below the fold */
+.quick-card { display: none; position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); padding: 10px 11px 9px; margin-bottom: 14px; }
+.quick-card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--rainbow); opacity: .9; }
+.quick-card .q-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 6px; font-size: 13px; }
+.quick-card .q-kpis { margin: 7px 0 0; }
+.quick-card .q-kpis > div { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 3px 0; border-bottom: 1px dashed var(--line); font-size: 12px; }
+.quick-card .q-kpis dt { color: var(--muted); white-space: nowrap; }
+.quick-card .q-kpis dd { margin: 0; text-align: right; color: var(--text2); }
+.quick-card .q-kpis dd b { font-size: 13.5px; color: var(--text); }
+.quick-card .q-mem { font-family: var(--mono); font-size: 11.5px; color: var(--text2); margin-top: 7px; overflow-wrap: anywhere; }
+.quick-card .q-mem .muted { font-family: var(--font); }
+.quick-card .q-note { font-size: 11px; color: var(--warn); margin-top: 4px; }
+.quick-card .q-open { margin-top: 6px; padding: 3px 8px; }
+
 .states { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
 .state {
   display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px;
@@ -574,6 +588,7 @@ body.col-dragging, body.col-dragging * { cursor: col-resize !important; user-sel
   }
   .designer.show-side .d-right, .explore.show-side .x-right { transform: none; }
   .side-toggle { display: inline-flex !important; }
+  .quick-card:not([hidden]) { display: block; }
   .calc-grid { grid-template-columns: 1fr; }
   .calc-nav { position: static; flex-direction: row; flex-wrap: wrap; }
   .vp-hud { width: 190px; }

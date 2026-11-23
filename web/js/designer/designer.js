@@ -106,6 +106,7 @@ export function createDesigner(root, ctx) {
     const bu = window.__msveMeta?.systems?.composite?.building_uses || {};
     const useName = (k) => (bu[k] || [])[0] || ['', 'Paper office', 'Electronic office', 'Residence', 'Assembly area'][k];
     $('#dIn', root).innerHTML = `
+      <div class="quick-card stale-dim" id="quick" aria-live="polite" hidden></div>
       <div class="panel-title">Floor system</div>
       <div class="seg seg-block" id="sysSeg" style="margin-bottom:12px">
         <button data-v="composite">Composite</button><button data-v="noncomposite">Non-composite</button>
@@ -550,6 +551,7 @@ export function createDesigner(root, ctx) {
   function renderResults() {
     const out = $('#dOut', root);
     if (!result) return;
+    renderQuick();
     if (!result.ok) {
       out.innerHTML = `<div class="verdict"><h3>No design for these inputs</h3><p class="muted small" style="margin:8px 0 0">${esc(result.error || '')}</p>
         <p class="small">The solver could not size a deck or members that pass every check.${S.ninf || S.slab ? ' With your own beam count or slab depth, the deck table may have no deck that spans that far or carries that slab — try Auto, more beams or another depth.' : ' Try a shorter span, a deeper deck or less composite action.'}</p></div>`;
@@ -665,6 +667,40 @@ export function createDesigner(root, ctx) {
     $('#shareBtn', out).onclick = async () => { try { await navigator.clipboard.writeText(location.href); toast('Link copied — it reopens this exact design.'); } catch { toast(location.href); } };
     $('#jsonBtn', out).onclick = () => downloadText(`bay_${result.system}_${S.g}x${S.i}.json`, JSON.stringify(result, null, 1), 'application/json');
     $$('[data-goto-tab]', out).forEach(b => b.onclick = () => { tab = b.dataset.gotoTab; store.set('anTab', tab); renderAnalysis(); $('#an', root).scrollIntoView({ behavior: 'smooth', block: 'nearest' }); });
+  }
+
+  // ------------------------------------------------------------------ quick result card
+  // Compact summary at the top of the inputs. CSS shows it only where the results panel is a drawer or below
+  // the fold (≤ 1100 px), so the verdict stays in view while the inputs change.
+  function renderQuick() {
+    const q = $('#quick', root);
+    if (!q || !result) return;
+    q.hidden = false;
+    const open = `<button type="button" class="btn btn-sm btn-ghost q-open" id="qOpen">Results ▸</button>`;
+    if (!result.ok) {
+      q.innerHTML = `<div class="q-top"><b>No design for these inputs</b><span class="pill fail">✗ no design</span></div>${open}`;
+    } else {
+      const key = sel();
+      const summ = stateSummary(result, key);
+      const v = result.captured[key].values;
+      const limit = v.tolerance_limit ?? 0.5;
+      const pass = summ.pa <= limit;
+      const ec = ecFromSolver(summ.ec);
+      q.innerHTML = `
+        <div class="q-top"><b>${esc(STATE_SHORT[key])}${key === 'best' ? ' <span class="star">★</span>' : ''}</b>
+          ${pass ? '<span class="pill pass">✓ meets 0.5 %g</span>' : '<span class="pill fail">✗ exceeds limit</span>'}</div>
+        <dl class="q-kpis">
+          <div><dt>Peak accel.</dt><dd><b style="color:${pass ? 'var(--pass)' : 'var(--fail)'}">${fmtFixed(summ.pa, 3)}</b> %g <span class="muted">· ${fmtFixed(summ.pa / limit, 2)}×</span></dd></div>
+          <div><dt>Frequency</dt><dd><b>${fmtFixed(summ.fn, 2)}</b> Hz</dd></div>
+          <div><dt>Carbon</dt><dd><b>${fmtFixed(ec.v, 2)}</b> ${ec.u}</dd></div>
+        </dl>
+        <div class="q-mem"><span class="muted">infill</span> ${esc(summ.infill)} <span class="muted">girder</span> ${esc(summ.girder)}${summ.add ? ` · +${summ.add}" topping` : ''}</div>
+        ${result.variant ? '<div class="q-note">Set by you — outside the paper\'s method.</div>' : ''}${open}`;
+    }
+    $('#qOpen', q).onclick = () => {
+      if (window.innerWidth <= 640) $('#dOut', root).scrollIntoView({ behavior: 'smooth', block: 'start' });
+      else { root.querySelector('.designer').classList.add('show-side'); renderTools(); }
+    };
   }
 
   // ------------------------------------------------------------------ mitigation trade-off chart
