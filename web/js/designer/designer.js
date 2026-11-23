@@ -4,10 +4,12 @@ import { api } from '../lib/api.js';
 import { loadShapes, loadDataset } from '../lib/data.js';
 import { fmt, fmtFixed, len, ecFromSolver, ecFromDataset, ecUnit, ecBay, getUnits, onUnits, LB_TO_KG, FT_TO_M } from '../lib/units.js';
 import { METHOD_COLORS, METHOD_LABELS, GRADIENT } from '../lib/colormap.js';
-import { scatter, stackedBar } from '../lib/charts.js';
+import { interactiveScatter, stackedBar } from '../lib/charts.js';
 import { Bay3D, DECK } from './bay3d.js';
 import * as C from './calcs.js';
 import { openReport } from './report.js';
+import { mountCalcs } from './calcpanel.js';
+import { columnSplitters } from '../lib/splitters.js';
 
 const STATE_SHORT = { initial: 'Initial design', infill: 'Upsize infills', girder: 'Upsize girders', conc: 'Add topping', steel: 'Upsize infills + girders', best: 'Best design', check: 'Your members' };
 const STATE_KEYS = ['initial', 'infill', 'girder', 'conc', 'steel', 'best'];
@@ -22,7 +24,10 @@ const maxStuds = (span) => 2 * Math.floor(1.5 * span) - 1;
 export function createDesigner(root, ctx) {
   const S = { ...DEFAULTS, ...store.get('designer', {}), auto: store.get('auto', true) };
   let shapes = null, calcInfo = {}, result = null, running = false, pending = false, reqId = 0, ds = {};
-  let bay = null, tab = store.get('anTab', 'chain'), calcFilter = '', varFilter = '', openVar = null;
+  let bay = null, tab = store.get('anTab', 'valid'), varFilter = '';
+  if (!['vars', 'valid', 'source'].includes(tab)) tab = 'valid';
+  const calcState = { open: new Set(), filter: '' };
+  let calcApi = null;
 
   // ------------------------------------------------------------------ layout
   root.innerHTML = `
@@ -44,11 +49,12 @@ export function createDesigner(root, ctx) {
     <aside class="d-right" id="dOut"><div class="muted" style="padding:10px">Starting the solver…</div></aside>
   </div>`;
 
+  columnSplitters(root.querySelector('.designer'), 'cols.designer');
   const vp = $('#vp', root);
   bay = new Bay3D(vp, {
     onProbe: (p) => { probe = p; renderHud(); },
     onHover: (p) => { hover = p; renderHudLive(); },
-    onPick: (kind) => { if (kind) toast(`${kind[0].toUpperCase() + kind.slice(1)} — see its checks in “Limit states”.`); },
+    onPick: (kind) => { if (kind) { toast(`${kind[0].toUpperCase() + kind.slice(1)} — its checks are open in Calculations.`); calcApi?.openGroup('checks'); } },
     onWalk: (w) => { walk = w; renderHudLive(); },
     onSection: (t) => { const s = $('#cutSl', root); if (s) s.value = t; },
   });
@@ -604,25 +610,10 @@ export function createDesigner(root, ctx) {
     }
     html += `</div></div></div>`;
 
-    // mitigation trade-off chart
-    const series = [];
-    const pts = [];
-    for (const k of keys) {
-      const ss = stateSummary(res, k);
-      if (!ss.applies || !res.captured[k]) continue;
-      pts.push({ x: ss.pa, y: ecFromSolver(ss.ec).v, color: STATE_COLOR[k], label: `${STATE_SHORT[k]}: ${ss.infill} / ${ss.girder}`, ring: k === key, size: k === key ? 6 : 4.5 });
-    }
-    for (const k of ['infill', 'girder', 'conc']) {
-      const p = res.states[k]?._path;
-      if (!p || p.length < 2) continue;
-      const init = res.states.initial;
-      const pathPts = [{ x: init['Peak Acceleration'], y: ecFromSolver(init['Embodied Carbon Scaled']).v }, ...p.map(q => ({ x: q['Peak Acceleration'], y: ecFromSolver(q['Embodied Carbon Scaled']).v, label: `${q['Infill Sizes']} / ${q['Girder Sizes']}${q['Additional Topping'] ? ` +${q['Additional Topping']}"` : ''}` }))];
-      series.push({ name: STATE_SHORT[k], color: STATE_COLOR[k], points: pathPts, line: true, size: 2, dash: k === 'conc' ? '4 3' : null });
-    }
-    series.push({ name: 'states', color: '#fff', points: pts });
-    html += `<div class="card" style="margin-top:12px"><div class="card-h">Mitigation trade-off <span class="sub">each step the solver took</span></div><div class="card-b">
-      <div class="chart-box">${scatter({ series, xLabel: 'Peak acceleration (%g)', yLabel: `EC (${ecUnit()})`, xLine: limit, xLineLabel: `${limit} %g`, xMin: 0 })}</div>
-      <div class="legend">${keys.filter(k => res.captured[k]).map(k => `<span><i style="background:${STATE_COLOR[k]}"></i>${STATE_SHORT[k]}</span>`).join('')}</div></div></div>`;
+    // mitigation trade-off chart (interactive; drawn after the panel is in the page)
+    html += `<div class="card" style="margin-top:12px"><div class="card-h">Mitigation trade-off <span class="sub">hover · click a state</span>
+      <button class="icon-btn sm" id="toBig" title="Open a large, interactive view" aria-label="Enlarge the chart"><svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M4 4h6v2H7.4l4 4L10 11.4l-4-4V10H4V4Zm16 0v6h-2V7.4l-4 4L12.6 10l4-4H14V4h6ZM4 20v-6h2v2.6l4-4 1.4 1.4-4 4H10v2H4Zm16 0h-6v-2h2.6l-4-4 1.4-1.4 4 4V14h2v6Z"/></svg></button></div>
+      <div class="card-b"><div class="chart-box" id="toChart"></div></div></div>`;
 
     // carbon split
     if (calcInfo[res.system]) {
@@ -657,13 +648,92 @@ export function createDesigner(root, ctx) {
       <button class="btn btn-ghost" id="jsonBtn" title="Every captured value as JSON">JSON</button></div>
       <div class="tiny muted" style="margin-top:10px">Engine: <code>${esc(res.engine.notebook)}</code> solver cell, SHA-256 ${esc(res.engine.solver_cell_sha256.slice(0, 12))}… · Python ${esc(res.engine.python)}, numpy ${esc(res.engine.numpy)}, pandas ${esc(res.engine.pandas)}</div>`;
 
-    out.innerHTML = `<div class="stale-dim">${html}</div>`;
+    const calcCard = calcInfo[res.system] ? `<div class="card calc-card"><div class="card-h">Calculations <span class="sub">${esc(STATE_SHORT[key])} · open any line for the calc</span></div><div class="card-b" id="calcBody"></div></div>` : '';
+    out.innerHTML = `<div class="stale-dim">${calcCard}${html}</div>`;
+    if (calcCard) {
+      calcApi = mountCalcs($('#calcBody', out), {
+        ci: calcInfo[res.system], cap, mode: S.mode, state: calcState,
+        onSource: (line) => { tab = 'source'; srcLine = line; store.set('anTab', tab); renderAnalysis(); },
+        onMissingVar: (nm) => jumpVar(nm),
+      });
+    }
+    drawTradeoff($('#toChart', out), res, key, SMALL);
+    $('#toBig', out).onclick = () => openTradeoff();
     renderAssume();
     $$('.state', out).forEach(b => b.onclick = () => { if (b.disabled) return; S.view = b.dataset.st; writeHash(); renderAll(); });
     $('#repBtn', out).onclick = () => openReport({ result, key: sel(), calcInfo: calcInfo[result.system], shapes, snapshot: bay.snapshot(), model: modelFor(result, sel()) });
     $('#shareBtn', out).onclick = async () => { try { await navigator.clipboard.writeText(location.href); toast('Link copied — it reopens this exact design.'); } catch { toast(location.href); } };
     $('#jsonBtn', out).onclick = () => downloadText(`bay_${result.system}_${S.g}x${S.i}.json`, JSON.stringify(result, null, 1), 'application/json');
     $$('[data-goto-tab]', out).forEach(b => b.onclick = () => { tab = b.dataset.gotoTab; store.set('anTab', tab); renderAnalysis(); $('#an', root).scrollIntoView({ behavior: 'smooth', block: 'nearest' }); });
+  }
+
+  // ------------------------------------------------------------------ mitigation trade-off chart
+  const chartHidden = new Set();
+  const SMALL = { width: 380, height: 260 }, BIG = { width: 1000, height: 560 };
+  function tradeSeries(res, key) {
+    const limit = res.captured[key]?.values?.tolerance_limit ?? 0.5;
+    const keys = S.mode === 'check' ? ['check', ...STATE_KEYS] : STATE_KEYS;
+    const ecTxt = (ec) => { const e = ecFromSolver(ec); return `${fmtFixed(e.v, 2)} ${e.u}`; };
+    const paTxt = (pa) => `<b style="color:${pa <= limit ? 'var(--pass)' : 'var(--fail)'}">${fmtFixed(pa, 3)} %g</b>`;
+    const series = [];
+    const init = res.states.initial;
+    for (const k of ['infill', 'girder', 'conc']) {
+      const p = res.states[k]?._path;
+      if (!p || p.length < 2 || !init?._applies) continue;
+      const step = (q, i) => ({
+        x: q['Peak Acceleration'], y: ecFromSolver(q['Embodied Carbon Scaled']).v,
+        tip: `<b style="color:${STATE_COLOR[k]}">${esc(STATE_SHORT[k])}</b> <span class="tt-s">step ${i} of ${p.length}</span>
+          <div>${esc(q['Infill Sizes'])} / ${esc(q['Girder Sizes'])}${q['Additional Topping'] ? ` · +${q['Additional Topping']}" topping` : ''}</div>
+          <div>${paTxt(q['Peak Acceleration'])} · ${ecTxt(q['Embodied Carbon Scaled'])}</div>`,
+      });
+      series.push({
+        name: STATE_SHORT[k], color: STATE_COLOR[k], line: true, size: 2.4, dash: k === 'conc' ? '4 3' : null, legend: false,
+        points: [{ x: init['Peak Acceleration'], y: ecFromSolver(init['Embodied Carbon Scaled']).v,
+          tip: `<b>Initial design</b><div>${esc(init['Infill Sizes'])} / ${esc(init['Girder Sizes'])}</div><div>${paTxt(init['Peak Acceleration'])} · ${ecTxt(init['Embodied Carbon Scaled'])}</div>` },
+        ...p.map((q, i) => step(q, i + 1))],
+      });
+    }
+    for (const k of keys) {
+      const ss = stateSummary(res, k);
+      if (!ss.applies || !res.captured[k]) continue;
+      const col = k === 'check' ? 'var(--text)' : STATE_COLOR[k];
+      series.push({ name: STATE_SHORT[k], color: col, points: [{
+        x: ss.pa, y: ecFromSolver(ss.ec).v, ring: k === key, size: k === key ? 6.5 : 5, key: k,
+        tip: `<b style="color:${col}">${esc(STATE_SHORT[k])}</b>${k === 'best' ? ' ★' : ''}${k === key ? ' <span class="tt-s">· shown</span>' : ''}
+          <div>${esc(ss.infill)} / ${esc(ss.girder)}${ss.add ? ` · +${ss.add}" topping` : ''}</div>
+          <div>${paTxt(ss.pa)} · ${ecTxt(ss.ec)}</div>${k === key ? '' : '<div class="tt-s">click to view this state</div>'}` }] });
+    }
+    return { series, limit };
+  }
+  function drawTradeoff(el, res, key, size) {
+    if (!el) return;
+    const { series, limit } = tradeSeries(res, key);
+    interactiveScatter(el, {
+      series, ...size, hidden: chartHidden, xLabel: 'Peak acceleration (%g)', yLabel: `EC (${ecUnit()})`,
+      xLine: limit, xLineLabel: `${limit} %g`, xMin: 0,
+      onPick: (k) => {
+        if (k === S.view || !result?.captured?.[k]) return;
+        S.view = k; writeHash(); renderAll();
+        const big = document.getElementById('toDlg');
+        if (big?.open) drawTradeoff($('#toBigChart', big), result, k, BIG);
+      },
+      onToggle: () => { if (result?.ok) drawTradeoff($('#toChart', root), result, sel(), SMALL); },
+    });
+  }
+  function openTradeoff() {
+    let dlg = document.getElementById('toDlg');
+    if (!dlg) {
+      dlg = h('dialog', { class: 'dlg chart-dlg', id: 'toDlg' });
+      dlg.innerHTML = `<div class="dlg-body"><div class="row" style="margin-bottom:6px"><h2 style="margin:0">Mitigation trade-off</h2><span class="spacer"></span>
+        <button class="icon-btn" id="toClose" aria-label="Close">✕</button></div>
+        <div class="small muted" style="margin-bottom:8px">Each line is one mitigation path the solver tried, step by step from the initial design; the large dots are the design states. Hover for members, peak acceleration and carbon; click a state to show it in the app; click a legend entry to hide or show it. The shaded band is above the tolerance limit.</div>
+        <div class="chart-box" id="toBigChart"></div></div>`;
+      document.body.append(dlg);
+      $('#toClose', dlg).onclick = () => dlg.close();
+      dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
+    }
+    dlg.showModal();
+    drawTradeoff($('#toBigChart', dlg), result, sel(), BIG);
   }
 
   function validationCard(res, key) {
@@ -750,7 +820,9 @@ export function createDesigner(root, ctx) {
     if (mode === 'mode') bar = `<div class="hud-title">Mode shape φ</div><div class="colorbar"></div><div class="colorbar-ticks"><span>0</span><span>0.5</span><span>1.0</span></div>`;
     else if (mode === 'accel') {
       const vmax = Math.max(ap, 2 * lim);
-      bar = `<div class="hud-title">a<sub>p</sub> × φ (%g)</div><div class="colorbar"><div class="limit-tick" style="left:${lim / vmax * 100}%"></div><div class="limit-tag" style="left:${lim / vmax * 100}%">${lim} %g</div></div><div class="colorbar-ticks"><span>0</span><span>${fmt(vmax / 2, 2)}</span><span>${fmt(vmax, 2)}</span></div>`;
+      const f = lim / vmax * 100;
+      const grad = `linear-gradient(90deg, #4178BE 0%, #85C1E9 ${0.2667 * f}%, #A3B376 ${0.5333 * f}%, #FCAE2E ${0.8 * f}%, #D62626 ${f}%, #3A0303 100%)`;
+      bar = `<div class="hud-title">a<sub>p</sub> × φ (%g) · red at the limit, darker above</div><div class="colorbar" style="background:${grad}"><div class="limit-tick" style="left:${lim / vmax * 100}%"></div><div class="limit-tag" style="left:${lim / vmax * 100}%">${lim} %g</div></div><div class="colorbar-ticks"><span>0</span><span>${fmt(vmax / 2, 2)}</span><span>${fmt(vmax, 2)}</span></div>`;
     } else if (mode === 'defl') {
       const dt = (v.DEF_j || 0) + (v.DEF_g || 0);
       bar = `<div class="hud-title">DG 11 deflection (in)</div><div class="colorbar"></div><div class="colorbar-ticks"><span>0</span><span>${fmt(dt / 2, 3)}</span><span>${fmt(dt, 3)}</span></div>`;
@@ -786,7 +858,7 @@ export function createDesigner(root, ctx) {
   }
 
   // ------------------------------------------------------------------ analysis tabs
-  const TABS = [['chain', 'Vibration (DG 11)'], ['limits', 'Limit states'], ['calcs', 'All calculations'], ['vars', 'Engine variables'], ['valid', 'Validation'], ['source', 'Solver source']];
+  const TABS = [['valid', 'Validation'], ['vars', 'Engine variables'], ['source', 'Solver source']];
   function renderAnalysis() {
     const tabs = $('#anTabs', root);
     const k = sel();
@@ -794,7 +866,6 @@ export function createDesigner(root, ctx) {
     const badge = (t) => {
       if (!cap) return '';
       if (t === 'valid') { const ok = cap.validation?.all_ok !== false && (cap.recheck?.n_bad || 0) === 0; return `<span class="badge ${ok ? 'pass' : 'fail'}">${ok ? '✓' : '!'}</span>`; }
-      if (t === 'limits' && calcInfo[result.system]) { const ok = C.structuralPass(calcInfo[result.system], cap.values) && cap.values.vibration_check !== false; return `<span class="badge ${ok ? 'pass' : 'fail'}" title="${ok ? 'all checks pass' : 'a strength, deflection or vibration check fails'}">${ok ? '✓' : '✗'}</span>`; }
       return '';
     };
     tabs.innerHTML = TABS.map(([id, t]) => `<button data-tab="${id}" class="${tab === id ? 'on' : ''}">${t}${badge(id)}</button>`).join('') +
@@ -803,16 +874,7 @@ export function createDesigner(root, ctx) {
     const body = $('#anBody', root);
     if (!cap) { body.innerHTML = `<div class="muted">${result && !result.ok ? 'No design — nothing to show.' : 'Run the solver to see every calculation.'}</div>`; return; }
     const ci = calcInfo[result.system];
-    if (tab === 'chain') body.innerHTML = C.renderChain(cap, ci);
-    else if (tab === 'limits') body.innerHTML = C.renderChecks(ci, cap, result.inputs, { mode: S.mode });
-    else if (tab === 'calcs') {
-      const r = C.renderSections(ci, cap, { filter: calcFilter, lines: ci.linesByVar });
-      body.innerHTML = `<div class="calc-toolbar"><input class="text-in" id="calcQ" placeholder="Search a quantity or variable…" value="${esc(calcFilter)}"><span class="tiny muted">Click a row for the code line, its inputs and the re-run check.</span></div>
-        <div class="calc-grid"><nav class="calc-nav">${r.nav}</nav><div id="calcSecs">${r.html}</div></div>`;
-      $('#calcQ', body).oninput = debounce((e) => { calcFilter = e.target.value; renderAnalysis(); $('#calcQ', root)?.focus(); const q = $('#calcQ', root); if (q) q.setSelectionRange(q.value.length, q.value.length); }, 200);
-      $$('[data-jump]', body).forEach(a => a.onclick = (e) => { e.preventDefault(); document.getElementById(a.dataset.jump)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
-      bindRows(body, cap, ci);
-    } else if (tab === 'vars') {
+    if (tab === 'vars') {
       body.innerHTML = `<div class="calc-toolbar"><input class="text-in" id="varQ" placeholder="Filter variables…" value="${esc(varFilter)}"></div>${C.renderAllVars(cap, { filter: varFilter })}`;
       $('#varQ', body).oninput = debounce((e) => { varFilter = e.target.value; renderAnalysis(); const q = $('#varQ', root); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }, 200);
       bindRows(body, cap, ci);
@@ -836,8 +898,7 @@ export function createDesigner(root, ctx) {
   }
 
   function jumpVar(nm) {
-    if (tab !== 'vars' && tab !== 'calcs') tab = 'vars';
-    if (tab === 'vars') varFilter = nm; else calcFilter = nm;
+    tab = 'vars'; varFilter = nm;
     renderAnalysis();
     const row = $(`#anBody tr.calc-row[data-var="${CSS.escape(nm)}"]`, root);
     if (row) { row.click(); row.scrollIntoView({ block: 'center', behavior: 'smooth' }); }

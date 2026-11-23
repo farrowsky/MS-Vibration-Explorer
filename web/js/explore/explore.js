@@ -6,6 +6,7 @@ import { OrbitControls } from 'three/addons/OrbitControls.js';
 import { $, $$, h, esc, store, debounce } from '../lib/dom.js';
 import { loadDataset } from '../lib/data.js';
 import { rgb, css as cmapCss, METHOD_COLORS, METHOD_LABELS, GRADIENT } from '../lib/colormap.js';
+import { columnSplitters } from '../lib/splitters.js';
 import { fmt, fmtFixed, ecFromDataset, ecUnit, getUnits, onUnits, LB_TO_KG, FT2_PER_M2 } from '../lib/units.js';
 
 const LIMIT = 0.5;
@@ -60,6 +61,7 @@ export function createExplorer(root, ctx) {
   </div>
   <div class="lightbox" id="lb" hidden></div>`;
   const stage = $('#xStage', root);
+  columnSplitters(root.querySelector('.explore'), 'cols.explore');
   const tip = h('div', { class: 'tip', hidden: true });
 
   async function getDs(sys) { if (!ds[sys]) ds[sys] = await loadDataset(sys); return ds[sys]; }
@@ -536,6 +538,8 @@ export function createExplorer(root, ctx) {
   $('#xSide', root).onclick = () => root.querySelector('.explore').classList.toggle('show-side');
   const onResize = debounce(() => { if (!root.closest('[hidden]') && F.view !== 'figs' && F.view !== 'land') renderStage(); }, 200);
   window.addEventListener('resize', onResize);
+  let stageW = 0;   // panel splitters change the stage width without a window resize
+  new ResizeObserver(() => { if (Math.abs(stage.clientWidth - stageW) > 2) { stageW = stage.clientWidth; onResize(); } }).observe(stage);
   onUnits(() => { if (!root.closest('[hidden]')) renderStage(); });
 
   return {

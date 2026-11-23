@@ -101,48 +101,54 @@ export function detailHTML(item, cap, calcInfo) {
 
 // ---------------------------------------------------------------------------
 // limit-state table
+// one limit-state row: demand, capacity/limit and the solver's own pass/fail boolean
+export function checkRow(c, vals) {
+  const L = (kind, span) => kind === 'L360' ? Math.min(span * 12 / 360, 1) : span * 12 / 240;
+  let flag = vals[c.flag];
+  if (flag && typeof flag === 'object' && 'infill' in flag) flag = c.flag === 'Eco' ? flag.girder : flag.infill;
+  let dem = null, cap_ = null, ratio = null, capTxt = '';
+  if (c.kind === 'cap') {
+    dem = vals[c.demand]; cap_ = vals[c.capacity];
+    capTxt = fmt(cap_, 2);
+    ratio = Number.isFinite(dem) && Number.isFinite(cap_) && cap_ > 0 ? dem / cap_ : null;
+  } else if (c.kind === 'L360' || c.kind === 'L240') {
+    dem = vals[c.demand]; const span = vals[c.capacity]; cap_ = L(c.kind, span);
+    capTxt = `${fmt(cap_, 3)} <span class="muted tiny">(${c.kind === 'L360' ? 'min(L/360, 1 in)' : 'L/240'})</span>`;
+    ratio = Number.isFinite(dem) ? dem / cap_ : null;
+  } else if (c.kind === 'pcc' && vals[c.flag === 'PCC_check_II' ? 'studs_II_override' : 'studs_IG_override'] != null) {
+    // studs set by the user: the member's own composite action vs the 25 % minimum
+    const m = c.flag === 'PCC_check_II' ? 'II' : 'IG';
+    const one = (x) => (Array.isArray(x) ? x[0] : x);
+    const q = one(vals[`Sigma_Qn_${m}`]), vp = one(vals[`V_prime_${m}`]);
+    dem = Number.isFinite(q) && Number.isFinite(vp) && vp > 0 ? 100 * q / vp : null;
+    cap_ = 25;
+    capTxt = '25 % minimum';
+    ratio = Number.isFinite(dem) && dem > 0 ? cap_ / dem : null;
+    c = { ...c, label: 'Your studs give at least 25 % composite (and fit in the ribs)', own: true };
+  } else if (c.kind === 'pcc') {
+    const opts = vals[c.demand];
+    dem = Array.isArray(opts) ? Math.max(...opts.filter(Number.isFinite)) : opts;
+    cap_ = vals.percent_comp;
+    capTxt = `${fmt(cap_, 0)} % requested`;
+    ratio = Number.isFinite(dem) && dem > 0 ? cap_ / dem : null;
+  } else if (c.kind === 'depth') {
+    const di = vals.infill_d, dg = vals.girder_d, k = vals.girder_k;
+    dem = di; cap_ = Number.isFinite(dg) && Number.isFinite(k) ? dg - k : null;
+    capTxt = `${fmt(cap_, 3)} <span class="muted tiny">(d − k of girder)</span>`;
+    ratio = Number.isFinite(dem) && Number.isFinite(cap_) ? dem / cap_ : null;
+  }
+  const pass = flag === true || flag === 1;
+  const unknown = flag === undefined || flag === null;
+  return { c, flag, dem, cap: cap_, ratio, capTxt, pass, unknown };
+}
+
 export function renderChecks(calcmap, cap, inputs, { mode = 'optimize' } = {}) {
   const vals = cap.values;
-  const L = (kind, span) => kind === 'L360' ? Math.min(span * 12 / 360, 1) : span * 12 / 240;
   const group = (title, items) => {
     let html = `<h4 style="margin:6px 0 6px">${title}</h4><table class="limit-table"><thead><tr><th>Limit state</th><th class="right">Demand</th><th class="right">Capacity / limit</th><th>Utilisation</th><th>Result</th><th class="muted">Basis</th></tr></thead><tbody>`;
-    for (let c of items) {
-      if (c.flag && !(c.flag in vals)) continue;
-      let flag = vals[c.flag];
-      if (flag && typeof flag === 'object' && 'infill' in flag) flag = c.flag === 'Eco' ? flag.girder : flag.infill;
-      let dem = null, cap_ = null, ratio = null, capTxt = '';
-      if (c.kind === 'cap') {
-        dem = vals[c.demand]; cap_ = vals[c.capacity];
-        capTxt = fmt(cap_, 2);
-        ratio = Number.isFinite(dem) && Number.isFinite(cap_) && cap_ > 0 ? dem / cap_ : null;
-      } else if (c.kind === 'L360' || c.kind === 'L240') {
-        dem = vals[c.demand]; const span = vals[c.capacity]; cap_ = L(c.kind, span);
-        capTxt = `${fmt(cap_, 3)} <span class="muted tiny">(${c.kind === 'L360' ? 'min(L/360, 1 in)' : 'L/240'})</span>`;
-        ratio = Number.isFinite(dem) ? dem / cap_ : null;
-      } else if (c.kind === 'pcc' && vals[c.flag === 'PCC_check_II' ? 'studs_II_override' : 'studs_IG_override'] != null) {
-        // studs set by the user: the member's own composite action vs the 25 % minimum
-        const m = c.flag === 'PCC_check_II' ? 'II' : 'IG';
-        const one = (x) => (Array.isArray(x) ? x[0] : x);
-        const q = one(vals[`Sigma_Qn_${m}`]), vp = one(vals[`V_prime_${m}`]);
-        dem = Number.isFinite(q) && Number.isFinite(vp) && vp > 0 ? 100 * q / vp : null;
-        cap_ = 25;
-        capTxt = '25 % minimum';
-        ratio = Number.isFinite(dem) && dem > 0 ? cap_ / dem : null;
-        c = { ...c, label: 'Your studs give at least 25 % composite (and fit in the ribs)' };
-      } else if (c.kind === 'pcc') {
-        const opts = vals[c.demand];
-        dem = Array.isArray(opts) ? Math.max(...opts.filter(Number.isFinite)) : opts;
-        cap_ = vals.percent_comp;
-        capTxt = `${fmt(cap_, 0)} % requested`;
-        ratio = Number.isFinite(dem) && dem > 0 ? cap_ / dem : null;
-      } else if (c.kind === 'depth') {
-        const di = vals.infill_d, dg = vals.girder_d, k = vals.girder_k;
-        dem = di; cap_ = Number.isFinite(dg) && Number.isFinite(k) ? dg - k : null;
-        capTxt = `${fmt(cap_, 3)} <span class="muted tiny">(d − k of girder)</span>`;
-        ratio = Number.isFinite(dem) && Number.isFinite(cap_) ? dem / cap_ : null;
-      }
-      const pass = flag === true || flag === 1;
-      const unknown = flag === undefined || flag === null;
+    for (const c0 of items) {
+      if (c0.flag && !(c0.flag in vals)) continue;
+      const { c, dem, ratio, capTxt, pass, unknown } = checkRow(c0, vals);
       const bar = ratio === null ? '<span class="muted tiny">—</span>' :
         `<div class="row"><div class="ratio-bar" style="flex:1"><i style="width:${Math.min(100, ratio * 100)}%;background:${ratio > 1 ? 'var(--fail)' : ratio > 0.9 ? 'var(--warn)' : 'var(--pass)'}"></i></div><span class="tiny" style="width:42px;text-align:right">${fmt(ratio * 100, 0)}%</span></div>`;
       const demTxt = c.kind === 'pcc' ? (dem === null ? '—' : `${fmt(dem, 1)} % ${capTxt === '25 % minimum' ? 'from your studs' : 'achievable'}`) : c.kind === 'flag' ? '' : fmt(dem, c.unit === 'in' ? 3 : 2);

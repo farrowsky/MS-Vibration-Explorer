@@ -35,6 +35,17 @@ Two values on screen are computed in the browser, and each is checked against th
 * deflection limits that the solver writes inline in its check lines (`min(L·12/360, 1)`, `L·12/240`). Pass/fail is
   always the solver's own boolean.
 
+## Mathcad-style calculations
+
+The Calculations panel draws each captured value from the notebook line that computed it (`web/js/designer/mathcad.js`).
+The line is parsed as a Python expression and shown three ways: the expression in symbols, the same expression with the
+captured inputs and their units substituted, and the captured value. Nothing is evaluated in the browser. numpy plumbing
+that does not change a value at one pair (`np.array`, `reshape`, `flatten`, `[:, np.newaxis]`) is dropped from the
+display. `np.where` is shown as `if(...)`, and `np.minimum` / `np.maximum` as `min` / `max`. Where a variable is set by a
+`np.where(case, x_case, x)` chain, the panel follows the case that applies to `x_case`'s own formula. Units are the
+solver's working units. The conversion constants written into a line (12, 1000, 1728, 386 …) are shown as they are
+written. Table lookups and string labels are shown as the solver's code.
+
 ## Known reporting quirk
 
 `Composite MS Code.ipynb`, cell 1 line 1809, `concrete_upsizing`:

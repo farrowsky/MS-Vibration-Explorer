@@ -45,7 +45,10 @@ uniform vec2 uOrigin;
 uniform float uLg, uLj, uDj, uDg, uAmp, uPhase, uTime;
 uniform vec4 uRip[8];
 float bayPhi(vec2 p) {
-  if (p.x < 0.0 || p.y < 0.0 || p.x > uLg || p.y > uLj) return 0.0;
+  // members on the bay edges (girders, edge infills) straddle it: a point within 1.5 ft
+  // takes the value on the edge, so both halves of a flange move together
+  if (p.x < -1.5 || p.y < -1.5 || p.x > uLg + 1.5 || p.y > uLj + 1.5) return 0.0;
+  p = clamp(p, vec2(0.0), vec2(uLg, uLj));
   float sx = sin(3.14159265 * p.x / uLg);
   float sz = sin(3.14159265 * p.y / uLj);
   return (uDg * sx + uDj * sz) / max(uDg + uDj, 1e-6);
@@ -261,8 +264,9 @@ export class Bay3D {
       column: new THREE.MeshStandardMaterial({ color: 0x8b98a5, metalness: 0.3, roughness: 0.6, transparent: true, opacity: 0.28, depthWrite: false }),
       hl: std({ color: 0xffffff, emissive: 0x85c1e9, emissiveIntensity: 0.55, metalness: 0.3, roughness: 0.4 }),
       // section-cut faces: self-lit so the cut reads clearly from any side
-      capConc: new THREE.MeshStandardMaterial({ color: 0xd8d4cb, emissive: 0x6b6861, roughness: 0.95, side: THREE.DoubleSide }),
-      capSteel: new THREE.MeshStandardMaterial({ color: 0xf0a640, emissive: 0x6a3f0c, roughness: 0.6, side: THREE.DoubleSide }),
+      // (displaced with the floor so the cut moves with it)
+      capConc: std({ color: 0xd8d4cb, emissive: 0x6b6861, roughness: 0.95, side: THREE.DoubleSide }),
+      capSteel: std({ color: 0xf0a640, emissive: 0x6a3f0c, roughness: 0.6, side: THREE.DoubleSide }),
     };
     for (const k of ['girder', 'infill', 'edge', 'deck', 'conc', 'stud', 'hl']) this.mat[k].clippingPlanes = [this.clipPlane];
     this.mat.conc.polygonOffset = true;
@@ -311,6 +315,15 @@ export class Bay3D {
             float val = uMode == 1 ? ph : (uMode == 2 ? uAp * ph : uDtot * ph);
             float t = uMode == 1 ? ph : val / max(uVmax, 1e-6);
             col = paperCmap(t);
+            if (uMode == 2) {
+              // peak acceleration: the paper's colours up to orange, red at the tolerance limit,
+              // then darker red the further above it (dark at uVmax)
+              float tl = val / max(uLimit, 1e-6);
+              vec3 red = vec3(0.84, 0.15, 0.15), dark = vec3(0.23, 0.01, 0.01);
+              if (tl <= 0.8) col = paperCmap(tl / 0.8 * 0.75);
+              else if (tl <= 1.0) col = mix(paperCmap(0.75), red, (tl - 0.8) / 0.2);
+              else col = mix(red, dark, clamp((val - uLimit) / max(uVmax - uLimit, 1e-6), 0.0, 1.0));
+            }
             // iso-lines every 10 %
             float f = t * 10.0;
             float w = fwidth(f);
@@ -322,10 +335,6 @@ export class Bay3D {
               float wl = fwidth(val);
               float ring = 1.0 - smoothstep(0.0, wl * 1.6, abs(e));
               col = mix(col, vec3(1.0), ring * 0.95);
-              if (e > 0.0) {
-                float hatch = step(0.82, fract((vB.x + vB.y) * 0.9 - uTime * 0.4));
-                col = mix(col, col * 1.25 + 0.06, hatch * 0.35);
-              }
             }
           }
           // ripple glint
@@ -341,7 +350,7 @@ export class Bay3D {
           float gl = 1.0 - smoothstep(0.0, fwidth(vB.x) * 1.2, min(0.5 - gq.x, 0.5 - gq.y));
           col = mix(col, col * 0.88, gl * 0.25);
           col *= lam;
-          if (uXray > 0.5) alpha = uMode == 0 ? 0.22 : 0.72;
+          if (uXray > 0.5) alpha = uMode == 0 ? 0.22 : 0.88;
           gl_FragColor = vec4(col, alpha);
           #include <colorspace_fragment>
         }`,
@@ -505,8 +514,10 @@ export class Bay3D {
     this.slabTop = top;
     this.slab = new THREE.Group();
     const section = new THREE.Shape();
+    // the top edge needs vertices along it to follow the floor's sag (displacement is per vertex)
+    const nTop = Math.max(16, Math.ceil(Lj * 2));
     section.moveTo(0, top);
-    section.lineTo(Lj, top);
+    for (let k = 1; k <= nTop; k++) section.lineTo(Lj * k / nTop, top);
     for (let j = prof.length - 1; j >= 0; j--) section.lineTo(prof[j][0] * IN, prof[j][1] * IN);
     section.closePath();
     const endGeo = new THREE.ShapeGeometry(section, 1);
