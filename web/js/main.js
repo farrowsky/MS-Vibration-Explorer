@@ -1,12 +1,17 @@
 // App shell: routing, theme, units, disclaimer, About page.
 import { $, $$, esc, toast, store } from './lib/dom.js';
 import { api, IN_BROWSER } from './lib/api.js';
+import { APP_NAME, APP_TAGLINE } from './lib/brand.js';
 import { PYODIDE_VERSION } from './engine/version.js';
 import { setUnits, getUnits } from './lib/units.js';
 import { createDesigner } from './designer/designer.js';
 
 const views = {};
 let designer = null, explorer = null;
+
+// ---------------------------------------------------------------- name (web/js/lib/brand.js)
+$('.brand-text').innerHTML = `<b>${APP_NAME}</b>`;
+$('.brand').setAttribute('aria-label', `${APP_NAME} home`);
 
 // ---------------------------------------------------------------- theme + units
 function applyTheme(t) { document.documentElement.dataset.theme = t; store.set('theme', t); }
@@ -34,7 +39,7 @@ async function route() {
   const name = ['designer', 'explore', 'about'].includes(path) ? path : 'designer';
   $$('.view').forEach(v => { v.hidden = v.dataset.view !== name; });
   $$('.tabs a').forEach(a => a.classList.toggle('on', a.dataset.route === name));
-  document.title = { designer: 'Bay Designer', explore: 'Design Space', about: 'About & Method' }[name] + ' · MS Vibration Explorer';
+  document.title = { designer: 'Bay Designer', explore: 'Design Space', about: 'About & Method' }[name] + ` · ${APP_NAME}`;
   if (name === 'designer') {
     if (!designer) designer = createDesigner($('#view-designer'), {});
     await designer.show(qs);
@@ -72,7 +77,7 @@ async function renderAbout() {
   const prov = (s) => meta?.systems?.[s]?.provenance;
   el.innerHTML = `<div class="about">
     <h1>About &amp; method</h1>
-    <p class="lead">MS Vibration Explorer is the interactive companion to <i>Carbon-Efficient Design Strategies for Mitigating Footfall
+    <p class="lead"><b>${APP_NAME}</b> (${APP_TAGLINE.toLowerCase()}) is the interactive companion to <i>Carbon-Efficient Design Strategies for Mitigating Footfall
       Vibration in Steel Framed Floor Systems</i> (S. D. Farrow, N. C. Brown and R. L. Solnosky). It runs the paper's own solver, the code
       published in the <b>MS-Vibration-Code</b> repository, so a reader can see exactly how each design in the study was produced, check
       every intermediate value, and explore the 40,344 published designs.</p>
@@ -140,7 +145,7 @@ async function renderAbout() {
 
     <h2>Cite</h2>
     <p>S. D. Farrow, N. C. Brown, R. L. Solnosky. <i>Carbon-Efficient Design Strategies for Mitigating Footfall Vibration in Steel Framed
-      Floor Systems.</i> Engineering Structures (under review), 2026. Code and data: MS-Vibration-Code. This tool: MS-Vibration-Explorer.
+      Floor Systems.</i> Engineering Structures (under review), 2026. Code and data: MS-Vibration-Code. This tool: ${APP_NAME}.
       Both MIT License.</p>
     <p class="small muted">Department of Architectural Engineering, The Pennsylvania State University.</p>
   </div>`;

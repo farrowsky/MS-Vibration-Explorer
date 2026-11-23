@@ -1,5 +1,5 @@
 """
-MS Vibration Explorer -- the API without a web framework.
+ParaFloor -- the API without a web framework.
 
 Everything the JSON API answers, as plain functions, so the same code runs in two places:
 
@@ -26,6 +26,7 @@ from . import calcmap as _calcmap
 from . import engine as eng
 
 VERSION = '1.0.0'
+APP_NAME = 'ParaFloor'      # the tool's name (front end: web/js/lib/brand.js)
 
 # Input limits. The paper's design space is the "studied" range; the solver runs
 # outside it (checked by tests/test_engine.py) and the page warns when it does.

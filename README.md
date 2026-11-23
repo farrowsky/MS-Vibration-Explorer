@@ -1,4 +1,4 @@
-# MS Vibration Explorer
+# ParaFloor
 
 Interactive companion to **_Carbon-Efficient Design Strategies for Mitigating Footfall Vibration in Steel Framed Floor Systems_**
 (S. D. Farrow, N. C. Brown and R. L. Solnosky; *Engineering Structures*, under review).
@@ -24,7 +24,7 @@ It runs **the paper's own solver**, the code published in
 
 Requires **Python 3.12 or newer** (the calculation capture uses `sys.monitoring`, added in 3.12). Developed on Python 3.13.
 
-**Windows:** double-click **`MS Vibration Explorer.bat`**. It finds Python 3.12+ (including Anaconda), installs the four
+**Windows:** double-click **`ParaFloor.bat`**. It finds Python 3.12+ (including Anaconda), installs the four
 dependencies on first run if they are missing, starts the solver service in the background and opens the tool in its own
 app window. Closing the window stops the service.
 **macOS / Linux:** `./run.sh` (opens <http://localhost:8000> in the browser).
@@ -42,8 +42,8 @@ python -m uvicorn server.app:app --port 8000
 **Docker:**
 
 ```bash
-docker build -t ms-vibration-explorer .
-docker run -p 8000:8000 ms-vibration-explorer
+docker build -t parafloor .
+docker run -p 8000:8000 parafloor
 ```
 
 ---

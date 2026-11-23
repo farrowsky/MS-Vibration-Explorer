@@ -1,4 +1,4 @@
-# MS Vibration Explorer launcher (Windows). Started by "MS Vibration Explorer.bat".
+# ParaFloor launcher (Windows). Started by "ParaFloor.bat".
 #
 # 1. finds Python 3.12+ (MSVE_PYTHON, py launcher, python, Anaconda/Miniconda, python.org installs)
 # 2. installs the requirements only if they are missing
@@ -52,7 +52,7 @@ function Find-Browser {
 }
 
 Say ''
-Say '  MS Vibration Explorer' 'Cyan'
+Say '  ParaFloor' 'Cyan'
 Say '  Research showcase for the paper - not a design tool.' 'DarkYellow'
 Say ''
 
@@ -76,7 +76,7 @@ try {
             & $exe @pre -m pip install --disable-pip-version-check -q -r requirements.txt
             if ($LASTEXITCODE -ne 0) { Say '  Installing the requirements failed.' 'Red'; exit 1 }
         }
-        $log = Join-Path $env:TEMP 'ms-vibration-explorer-server.log'
+        $log = Join-Path $env:TEMP 'parafloor-server.log'
         Say '  Starting the solver service...'
         $args = $pre + @('-m', 'uvicorn', 'server.app:app', '--host', '127.0.0.1', '--port', "$Port", '--log-level', 'warning')
         $server = Start-Process -FilePath $exe -ArgumentList $args -WorkingDirectory $Root -WindowStyle Hidden `

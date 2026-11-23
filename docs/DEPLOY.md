@@ -49,8 +49,8 @@ repository **Settings → Pages → Source: GitHub Actions**. On a free GitHub p
 ## Docker (Render, Railway, Fly.io, a VPS …)
 
 ```bash
-docker build -t ms-vibration-explorer .
-docker run -p 8000:8000 -e MSVE_CACHE_DIR=/tmp/msve ms-vibration-explorer
+docker build -t parafloor .
+docker run -p 8000:8000 -e MSVE_CACHE_DIR=/tmp/msve parafloor
 ```
 
 The image honours `$PORT`. Health check: `GET /api/health`.

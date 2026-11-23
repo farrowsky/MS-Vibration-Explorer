@@ -1,6 +1,6 @@
 # Disclaimer
 
-MS Vibration Explorer is a **research showcase**. It exists to communicate and reproduce the study
+ParaFloor is a **research showcase**. It exists to communicate and reproduce the study
 *Carbon-Efficient Design Strategies for Mitigating Footfall Vibration in Steel Framed Floor Systems*
 (S. D. Farrow, N. C. Brown and R. L. Solnosky) and the code published with it.
 

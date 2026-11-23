@@ -38,7 +38,7 @@ def test_rejects_bad_input():
 
 def test_static_front_end():
     r = client.get('/')
-    assert r.status_code == 200 and 'MS Vibration Explorer' in r.text
+    assert r.status_code == 200 and 'ParaFloor' in r.text
     assert client.get('/js/main.js').status_code == 200
 
 

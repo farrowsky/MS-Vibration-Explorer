@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MS Vibration Explorer</title>
+<title>ParaFloor · parametric footfall vibration and embodied carbon for steel floors</title>
 <meta name="description" content="Interactive companion to 'Carbon-Efficient Design Strategies for Mitigating Footfall Vibration in Steel Framed Floor Systems': design a steel floor bay with the paper's own solver and explore the published design space.">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="css/app.css">
@@ -14,9 +14,9 @@
 <body>
 <div id="app">
   <header class="topbar">
-    <a class="brand" href="#/designer" aria-label="MS Vibration Explorer home">
+    <a class="brand" href="#/designer" aria-label="ParaFloor home">
       <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-text"><b>MS Vibration</b> Explorer</span>
+      <span class="brand-text"><b>ParaFloor</b></span>
     </a>
     <nav class="tabs" aria-label="Modules">
       <a href="#/designer" data-route="designer"><span class="tab-num">1</span>Bay Designer</a>
@@ -77,9 +77,9 @@
 <div id="fileGuard" hidden style="position:fixed;inset:0;z-index:100;display:grid;place-items:center;background:#0a0e13;color:#e7edf3;font:15px/1.5 system-ui,sans-serif">
   <div style="max-width:520px;padding:32px;border:1px solid #2c3d50;border-radius:14px;background:#121a23;text-align:center">
     <div style="width:44px;height:44px;margin:0 auto 14px;border-radius:11px;background:linear-gradient(90deg,#4178BE,#85C1E9,#A3B376,#FCAE2E,#E57373)"></div>
-    <h2 style="margin:0 0 8px">MS Vibration Explorer is an app</h2>
+    <h2 style="margin:0 0 8px">ParaFloor is an app</h2>
     <p style="color:#b4c0cc;margin:0 0 6px">This file can't run on its own. Open the tool by double-clicking
-      <b style="color:#fff">MS Vibration Explorer.bat</b> in the project folder: it starts the paper's solver and opens the app window.</p>
+      <b style="color:#fff">ParaFloor.bat</b> in the project folder: it starts the paper's solver and opens the app window.</p>
     <p id="fileGuardMsg" style="color:#7d8b99;font-size:13px;margin:12px 0 0">Looking for a running copy…</p>
   </div>
 </div>
@@ -93,7 +93,7 @@
       img.onload = function () { if (!found) { found = true; location.replace('http://localhost:' + p + '/'); } };
       img.src = 'http://localhost:' + p + '/assets/favicon.svg?' + Date.now();
     });
-    setTimeout(function () { if (!found) document.getElementById('fileGuardMsg').textContent = 'No running copy found — use MS Vibration Explorer.bat.'; }, 2500);
+    setTimeout(function () { if (!found) document.getElementById('fileGuardMsg').textContent = 'No running copy found — use ParaFloor.bat.'; }, 2500);
   }
 </script>
 <noscript><p style="padding:2rem">This tool needs JavaScript (and WebGL for the 3D views).</p></noscript>

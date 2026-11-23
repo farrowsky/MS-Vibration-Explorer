@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: "If you use this tool, please cite the manuscript below."
-title: "MS Vibration Explorer: interactive companion to 'Carbon-Efficient Design Strategies for Mitigating Footfall Vibration in Steel Framed Floor Systems'"
+title: "ParaFloor: parametric footfall vibration and embodied carbon for steel floors. Interactive companion to 'Carbon-Efficient Design Strategies for Mitigating Footfall Vibration in Steel Framed Floor Systems'"
 type: software
 authors:
   - family-names: Farrow

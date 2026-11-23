@@ -1,5 +1,5 @@
 """
-MS Vibration Explorer -- web server.
+ParaFloor -- web server.
 
     python -m uvicorn server.app:app --port 8000        (from the repository root)
 
@@ -33,7 +33,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import service as svc
-from .service import LIMITS, VERSION, DesignRequest, ServiceError  # noqa: F401  (re-exported)
+from .service import APP_NAME, LIMITS, VERSION, DesignRequest, ServiceError  # noqa: F401  (re-exported)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
@@ -48,7 +48,7 @@ async def _lifespan(_app):
     yield
 
 
-app = FastAPI(title='MS Vibration Explorer', version=VERSION, docs_url='/api/docs', redoc_url=None,
+app = FastAPI(title=APP_NAME, version=VERSION, docs_url='/api/docs', redoc_url=None,
               lifespan=_lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
