@@ -750,13 +750,29 @@ export function createDesigner(root, ctx) {
         ...p.map((q, i) => step(q, i + 1))],
       });
     }
-    for (const k of keys) {
+    // upsizing infills and girders together is not a step-by-step path: the solver searches every infill x girder
+    // pair at once and keeps the lowest-carbon one that passes. Drawn as one dashed jump from the initial design.
+    const st = res.states.steel;
+    if (st?._applies && init?._applies) {
+      const tipS = `<b style="color:${STATE_COLOR.steel}">${esc(STATE_SHORT.steel)}</b> <span class="tt-s">one jump</span><div>The solver searches every infill × girder pair and keeps the lowest-carbon pair that passes.</div>`;
+      series.push({
+        name: STATE_SHORT.steel, color: STATE_COLOR.steel, line: true, size: 0.1, dash: '8 5', legend: false,
+        points: [{ x: init['Peak Acceleration'], y: ecFromSolver(init['Embodied Carbon Scaled']).v, tip: tipS },
+          { x: st['Peak Acceleration'], y: ecFromSolver(st['Embodied Carbon Scaled']).v, tip: tipS }],
+      });
+    }
+    // a state on top of another (best is usually one of the paths' end points): draw best first, larger, as a halo
+    const same = (a, b) => { const A = stateSummary(res, a), B = stateSummary(res, b); return A.applies && B.applies && A.pa === B.pa && A.ec === B.ec; };
+    const bestOn = STATE_KEYS.filter(k => k !== 'best' && k !== 'initial' && same('best', k));
+    const order = bestOn.length ? ['best', ...keys.filter(k => k !== 'best')] : keys;
+    for (const k of order) {
       const ss = stateSummary(res, k);
       if (!ss.applies || !res.captured[k]) continue;
       const col = k === 'check' ? 'var(--text)' : STATE_COLOR[k];
+      const halo = k === 'best' && bestOn.length;
       series.push({ name: STATE_SHORT[k], color: col, points: [{
-        x: ss.pa, y: ecFromSolver(ss.ec).v, ring: k === key, size: k === key ? 6.5 : 5, key: k,
-        tip: `<b style="color:${col}">${esc(STATE_SHORT[k])}</b>${k === 'best' ? ' ★' : ''}${k === key ? ' <span class="tt-s">· shown</span>' : ''}
+        x: ss.pa, y: ecFromSolver(ss.ec).v, ring: k === key, size: halo ? 10 : k === key ? 6.5 : 5, key: k,
+        tip: `<b style="color:${col}">${esc(STATE_SHORT[k])}</b>${k === 'best' ? ' ★' : ''}${halo ? ` <span class="tt-s">= ${bestOn.map(b => esc(STATE_SHORT[b])).join(', ')}</span>` : ''}${k === key ? ' <span class="tt-s">· shown</span>' : ''}
           <div>${esc(ss.infill)} / ${esc(ss.girder)}${ss.add ? ` · +${ss.add}" topping` : ''}</div>
           <div>${paTxt(ss.pa)} · ${ecTxt(ss.ec)}</div>${k === key ? '' : '<div class="tt-s">click to view this state</div>'}` }] });
     }
@@ -783,7 +799,7 @@ export function createDesigner(root, ctx) {
       dlg = h('dialog', { class: 'dlg chart-dlg', id: 'toDlg' });
       dlg.innerHTML = `<div class="dlg-body"><div class="row" style="margin-bottom:6px"><h2 style="margin:0">Mitigation trade-off</h2><span class="spacer"></span>
         <button class="icon-btn" id="toClose" aria-label="Close">✕</button></div>
-        <div class="small muted" style="margin-bottom:8px">Each line is one mitigation path the solver tried, step by step from the initial design; the large dots are the design states. Hover for members, peak acceleration and carbon; click a state to show it in the app; click a legend entry to hide or show it. The shaded band is above the tolerance limit.</div>
+        <div class="small muted" style="margin-bottom:8px">Each line is one mitigation path the solver tried, step by step from the initial design; the large dots are the design states. Upsizing infills and girders together is a single search over every pair, so it is drawn as one long-dashed blue jump. When the best design is one of the other states, it is the green halo around that state's dot. Hover for members, peak acceleration and carbon; click a state to show it in the app; click a legend entry to hide or show it. The shaded band is above the tolerance limit.</div>
         <div class="chart-box" id="toBigChart"></div></div>`;
       document.body.append(dlg);
       $('#toClose', dlg).onclick = () => dlg.close();

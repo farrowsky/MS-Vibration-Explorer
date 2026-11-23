@@ -172,7 +172,11 @@ export function buildReport({ result: res, key, calcInfo, shapes, views = [], mo
     if (k === 'check') { const c = res.captured.check?.values; return c && { label: SHORT[k], pa: c.peak_acceleration, ec: V.ecM2(c.EC_scaled), color: STATE_COLOR[k], sel: k === key }; }
     const s = res.states[k];
     return s?._applies && { label: SHORT[k], pa: s['Peak Acceleration'], ec: V.ecM2(s['Embodied Carbon Scaled']), color: STATE_COLOR[k], sel: k === key };
-  }).filter(Boolean);
+  }).filter(Boolean).reduce((acc, p) => {         // states at the same point (best = one of the others): one dot, joint label
+    const twin = acc.find(q => q.pa === p.pa && q.ec === p.ec);
+    if (twin) { twin.label += ` = ${p.label}`; twin.sel = twin.sel || p.sel; if (p.label === SHORT.best) twin.color = STATE_COLOR.best; } else acc.push({ ...p });
+    return acc;
+  }, []);
   const sp = C.carbonSplit(cap, calcInfo);
   const va = cap.validation, rc = cap.recheck, mt = res._match;
   const pass = v.peak_acceleration <= v.tolerance_limit;
