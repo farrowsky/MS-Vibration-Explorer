@@ -144,11 +144,11 @@ def _warnings(req: DesignRequest) -> list[str]:
     if req.clear_spans != 3:
         out.append('The paper used deck continuous over 3 spans.')
     if req.num_infill:
-        out.append(f'Interior infill count set to {req.num_infill} by the user: outside the paper\'s method, '
-                   'where the solver derives it from the deck table.')
+        out.append(f'Interior infill count set to {req.num_infill} by the user; by default the solver derives it '
+                   'from the deck table.')
     if req.slab_total:
-        out.append(f'Total slab depth set to {req.slab_total:g} in by the user: outside the paper\'s method, '
-                   'where the solver picks the lightest deck and topping that work.')
+        out.append(f'Total slab depth set to {req.slab_total:g} in by the user; by default the solver picks the '
+                   'lightest deck and topping that work.')
     for k, what, unit in (('camber_infill', 'Infill camber', ' in'), ('camber_girder', 'Girder camber', ' in'),
                           ('studs_infill', 'Studs per infill', ''), ('studs_girder', 'Studs per girder', '')):
         v = getattr(req, k)

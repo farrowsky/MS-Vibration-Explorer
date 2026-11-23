@@ -795,7 +795,7 @@ class PaperEngine:
                             f"{kw['studs_IG_override']} studs per girder" if kw.get('studs_IG_override') is not None else '',
                         ] if x)
                         + '. Uses a copy of the published solver with one-line overrides (identical to it when not set); '
-                          'outside the method of the paper.'}
+                          'everything else follows the published solver.'}
 
     def check_pair(self, p: dict, infill_shape: str, girder_shape: str) -> dict:
         """Capture one infill/girder pair only (the member check with user camber or studs).

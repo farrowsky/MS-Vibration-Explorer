@@ -54,9 +54,10 @@ infill, but `expand_girder` lays it along the girder axis, so the reported label
 index. Only this descriptive label is affected. The tool shows the captured value, marks the column as a known quirk,
 and leaves the published code unchanged.
 
-## User overrides (outside the paper's method)
+## User overrides (Custom design)
 
-The Bay Designer can set two things the published solver normally decides: the number of interior beams
+In **Custom design** the Bay Designer can set two things the published solver normally decides (Optimize always
+uses the solver's own rules): the number of interior beams
 (`num_infill_override`) and the total slab depth (`slab_total_override`, one of the depths the deck table offers).
 They are applied to a *separate copy* of the solver cell by one-line replacements, the technique the paper's
 damping study used for its damping override, so line numbers are unchanged:
@@ -64,7 +65,7 @@ damping study used for its damping override, so line numbers are unchanged:
 * `NumInfill = max(1, ms.ceil(NumInfill_unrounded))` gains `... if num_infill_override is None else int(num_infill_override)`;
 * `Deck_Check = ...` gains `& (Total_Depth == slab_total_override)` when a depth is set.
 
-In the composite **member check** the user can also set the camber and the number of studs on the checked infill and
+In **Custom design** (composite) the user can also set the camber and the number of studs on the checked infill and
 girder (blank = the solver's value). The same copy gains, again one line each:
 
 * `camber_II` / `camber_IG` take the user's camber instead of 0.8 × the construction deflection;

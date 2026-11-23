@@ -131,6 +131,14 @@ main { flex: 1; min-height: 0; }
 .assume table { width: 100%; border-collapse: collapse; }
 .assume td { padding: 2px 0; vertical-align: top; }
 .assume td:first-child { color: var(--muted); padding-right: 8px; }
+.custom-mod { border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 5%, transparent); border-radius: var(--radius); padding: 10px 10px 2px; margin-bottom: 14px; }
+.custom-h { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; color: var(--text2); margin-bottom: 10px; }
+.custom-h span { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--muted); margin-left: 4px; }
+.assume td { padding-bottom: 6px; }
+.assume .src-row { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
+.assume .src { font-size: 10.5px; line-height: 1.35; border-radius: 5px; padding: 1px 6px; }
+.assume .src.in { color: var(--info, #85C1E9); background: color-mix(in srgb, var(--info, #85C1E9) 12%, transparent); }
+.assume .src.fx { color: var(--muted); background: var(--panel2); }
 .stale-badge { position: sticky; top: 0; z-index: 4; display: flex; align-items: center; gap: 8px; padding: 6px 10px; margin-bottom: 8px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 18%, var(--panel)); border: 1px solid var(--accent); font-size: 12.5px; font-weight: 600; }
 .is-stale .stale-dim { opacity: .45; filter: grayscale(.6); transition: opacity .2s; pointer-events: none; }
 

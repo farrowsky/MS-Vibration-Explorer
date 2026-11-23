@@ -11,7 +11,7 @@ import { openReport } from './report.js';
 import { mountCalcs } from './calcpanel.js';
 import { columnSplitters } from '../lib/splitters.js';
 
-const STATE_SHORT = { initial: 'Initial design', infill: 'Upsize infills', girder: 'Upsize girders', conc: 'Add topping', steel: 'Upsize infills + girders', best: 'Best design', check: 'Your members' };
+const STATE_SHORT = { initial: 'Initial design', infill: 'Upsize infills', girder: 'Upsize girders', conc: 'Add topping', steel: 'Upsize infills + girders', best: 'Best design', check: 'Your design' };
 const STATE_KEYS = ['initial', 'infill', 'girder', 'conc', 'steel', 'best'];
 const STATE_COLOR = { initial: '#8b98a5', infill: '#85C1E9', girder: '#FCAE2E', conc: '#E57373', steel: '#4178BE', best: '#A3B376', check: '#ffffff' };
 
@@ -27,6 +27,9 @@ export function createDesigner(root, ctx) {
   let bay = null, tab = store.get('anTab', 'valid'), varFilter = '';
   if (!['vars', 'valid', 'source'].includes(tab)) tab = 'valid';
   const calcState = { open: new Set(), filter: '' };
+  // beam count and slab depth are Custom-design inputs: Optimize always uses the solver's own rules
+  const nInf = () => (S.mode === 'check' ? S.ninf : null);
+  const slabT = () => (S.mode === 'check' ? S.slab : null);
   let calcApi = null;
 
   // ------------------------------------------------------------------ layout
@@ -77,7 +80,7 @@ export function createDesigner(root, ctx) {
     const look = S.conc === 1 ? 1 : 0;
     const smax = window.__msveMeta?.systems?.[S.system]?.spacing_lookup?.[`${look}|${S.deck}`] || 10;
     const N = result?.ok ? (result.captured?.[S.view === 'check' ? 'check' : 'initial']?.values?.NumInfill ?? null) : null;
-    const n = S.ninf || N || Math.max(1, Math.ceil(g / smax - 1));
+    const n = nInf() || N || Math.max(1, Math.ceil(g / smax - 1));
     let lines = '';
     for (let q = 0; q <= n + 1; q++) {
       const x = ox + w * q / (n + 1);
@@ -114,11 +117,19 @@ export function createDesigner(root, ctx) {
       </div>
       <div class="mode-cards" id="modeCards">
         <button class="mode-card" data-v="optimize"><b>Optimize for me</b><span>Paper's solver picks the lowest-carbon members that pass</span></button>
-        <button class="mode-card" data-v="check"><b>Check my members</b><span>Pick an infill and girder; see every check</span></button>
+        <button class="mode-card" data-v="check"><b>Custom design</b><span>Set the members, framing, slab, camber and studs yourself; see every check</span></button>
       </div>
-      <div id="checkPick" hidden>
+      <div id="checkPick" class="custom-mod" hidden>
+        <div class="custom-h">Custom design <span>blank or Auto = the solver's own rule</span></div>
         <div class="field"><div class="field-label"><span>Infill beam W-shape${help('The beams that span between the girders (length L_j). Type to search, e.g. W16X26.')}</span></div><div class="shape-pick" id="isPick"></div></div>
         <div class="field"><div class="field-label"><span>Girder W-shape${help('The two beams on the column lines that carry the infills (length L_g).')}</span></div><div class="shape-pick" id="gsPick"></div></div>
+        <div class="field"><div class="field-label"><span>Beams between girders${help('Number of interior infill beams. Auto: the paper\'s solver sets it from the deck table (the widest spacing a 22 ga deck with minimum topping can span).')}</span><span class="hint" id="ninfV"></span></div>
+          <div class="row"><div class="seg" id="ninfAuto"><button data-v="auto">Auto</button></div>
+            <div class="num-box" style="flex:1"><button type="button" class="btn btn-ghost btn-sm" id="ninfDn" aria-label="Fewer beams" style="border:0;padding:4px 10px">−</button>
+            <input type="number" id="ninfN" min="1" max="14" step="1" aria-label="Number of interior beams" style="width:40px;text-align:center;padding-left:0">
+            <button type="button" class="btn btn-ghost btn-sm" id="ninfUp" aria-label="More beams" style="border:0;padding:4px 10px">+</button><span style="margin-left:auto">beams</span></div></div></div>
+        <div class="field"><div class="field-label"><span>Total slab depth${help('Deck rib depth plus concrete above the ribs. Auto: the solver picks the lightest deck and topping in its table that carry the load. The other options are the depths the deck table offers for the deck and concrete chosen under Slab.')}</span><span class="hint" id="slabV"></span></div>
+          <div class="seg seg-block" id="slabSeg"></div></div>
         <div class="field" id="ovrField"><div class="field-label"><span>Camber and studs${help('Optional. Leave a box blank and the paper\'s solver sets the value (shown in grey). Solver camber: 0.8 × the construction deflection, rounded to ¼ in, only when that exceeds ⅝ in on spans of 24 ft or more. Solver studs: the fewest ¾ in studs that reach the degree of composite action. A number you type replaces the solver\'s value on that member. Your studs then set ΣQn (half the studs on each side of midspan × Qn, up to full composite), the solver\'s rule for fitting them in the ribs is kept, and the member must still reach 25 % composite.')}</span><button type="button" class="link-btn" id="ovrReset">Use solver values</button></div>
           <table class="ovr"><tr><th></th><th>Infill beam</th><th>Girder</th></tr>
             <tr><td>Camber</td><td><div class="num-box" id="ciB"><input type="number" id="ciN" min="0" max="4" step="0.25" aria-label="Infill camber in inches (blank = solver)"><span>in</span></div></td>
@@ -134,19 +145,12 @@ export function createDesigner(root, ctx) {
       <div style="display:flex;justify-content:center;margin:-4px 0 6px" id="plan"></div>
       ${spanField('g', 'Girder span L<sub>g</sub>', 'Column to column along the girders. The beams frame into the girders and the deck ribs run parallel to the girders. Paper studied 10–50 ft.')}
       ${spanField('i', 'Beam span L<sub>j</sub>', 'Span of the infill (filler) beams, girder to girder. Paper studied 10–50 ft.')}
-      <div class="field"><div class="field-label"><span>Beams between girders${help('Number of interior infill beams. Auto: the paper\'s solver sets it from the deck table (the widest spacing a 22 ga deck with minimum topping can span). Setting it yourself is outside the paper\'s method.')}</span><span class="hint" id="ninfV"></span></div>
-        <div class="row"><div class="seg" id="ninfAuto"><button data-v="auto">Auto</button></div>
-          <div class="num-box" style="flex:1"><button type="button" class="btn btn-ghost btn-sm" id="ninfDn" aria-label="Fewer beams" style="border:0;padding:4px 10px">−</button>
-          <input type="number" id="ninfN" min="1" max="14" step="1" aria-label="Number of interior beams" style="width:40px;text-align:center;padding-left:0">
-          <button type="button" class="btn btn-ghost btn-sm" id="ninfUp" aria-label="More beams" style="border:0;padding:4px 10px">+</button><span style="margin-left:auto">beams</span></div></div></div>
 
       <div class="panel-title">Slab</div>
       <div class="field"><div class="field-label"><span>Concrete</span></div>
         <div class="seg seg-block" id="concSeg"><button data-v="0">Normal-weight <span class="muted tiny">145 pcf</span></button><button data-v="1">Lightweight <span class="muted tiny">110 pcf</span></button></div></div>
       <div class="field"><div class="field-label"><span>Deck rib depth${help('Composite steel deck profile (VL type). The solver picks the gauge and the concrete above the ribs from its deck table, for the infill spacing it chose.')}</span></div>
         <div class="deck-icons" id="deckBtns">${[1.5, 2, 3].map(d => `<button class="deck-btn" data-v="${d}">${deckIcon(d)}${d}" deck</button>`).join('')}</div></div>
-      <div class="field"><div class="field-label"><span>Total slab depth${help('Deck rib depth plus concrete above the ribs. Auto: the solver picks the lightest deck and topping in its table that carry the load. The other options are the depths the deck table offers for this deck and concrete; choosing one is outside the paper\'s method.')}</span><span class="hint" id="slabV"></span></div>
-        <div class="seg seg-block" id="slabSeg"></div></div>
       <div class="field" id="pccField"><div class="field-label"><span>Degree of composite action${help('Partial composite connection: ΣQn as a percent of the force for full composite action (AISC 360 I3). The solver sizes the studs to reach it. Paper studied 25, 50 and 75 %; above about 80 % the studs often cannot fit.')}</span><span class="hint" id="pccV"></span></div>
         <div class="row"><div class="seg seg-block" id="pccSeg" style="flex:1"><button data-v="25">25 %</button><button data-v="50">50 %</button><button data-v="75">75 %</button></div>
         <div class="num-box" title="Other value, 25–90 % in 5 % steps (outside the study)"><input type="number" id="pccN" min="25" max="90" step="5" aria-label="Other degree of composite action, percent"><span>%</span></div></div></div>
@@ -255,7 +259,7 @@ export function createDesigner(root, ctx) {
     }
     $('#siN', R).max = maxStuds(S.i); $('#sgN', R).max = maxStuds(S.g);
     $('#ovrReset', R).disabled = !memberOverrides();
-    $('#ovrInfo', R).innerHTML = (memberOverrides() ? '<span style="color:var(--warn)">Set by you — outside the paper\'s method.</span> ' : 'Blank = the solver\'s value. ') +
+    $('#ovrInfo', R).innerHTML = (memberOverrides() ? '<span style="color:var(--warn)">Set by you.</span> ' : 'Blank = the solver\'s value. ') +
       `Up to ${maxStuds(S.i)} studs fit on an infill and ${maxStuds(S.g)} on a girder (3 per rib).`;
     renderAssume();
     $('#autoChk', R).checked = !!S.auto;
@@ -316,8 +320,8 @@ export function createDesigner(root, ctx) {
     const q = new URLSearchParams({ sys: S.system === 'composite' ? 'c' : 'nc', g: S.g, i: S.i, c: S.conc, d: S.deck, p: S.pcc, u: S.use, cs: S.clear, fl: S.fl, fw: S.fw, m: S.mode === 'check' ? 'chk' : 'opt' });
     if (S.mode === 'check') { if (S.is) q.set('is', S.is); if (S.gs) q.set('gs', S.gs); }
     if (S.view && S.view !== 'best') q.set('st', S.view);
-    if (S.ninf) q.set('n', S.ninf);
-    if (S.slab) q.set('sl', S.slab);
+    if (nInf()) q.set('n', nInf());
+    if (slabT()) q.set('sl', slabT());
     if (memberOverrides()) for (const k of Object.keys(MEMBER_OVR)) if (S[k] !== null && S[k] !== undefined) q.set(k, S[k]);
     history.replaceState(null, '', `#/designer?${q}`);
   }
@@ -379,8 +383,8 @@ export function createDesigner(root, ctx) {
   function request() {
     const b = { system: S.system, girder_span: S.g, infill_span: S.i, conc_type: S.conc, deck_type: S.deck, percent_comp: S.pcc, building_use: S.use, clear_spans: S.clear, floor_length: S.fl, floor_width: S.fw, mode: S.mode };
     if (S.mode === 'check') { b.infill_shape = S.is; b.girder_shape = S.gs; }
-    if (S.ninf) b.num_infill = S.ninf;
-    if (S.slab) b.slab_total = S.slab;
+    if (nInf()) b.num_infill = nInf();
+    if (slabT()) b.slab_total = slabT();
     Object.assign(b, memberOverrides() || {});
     return b;
   }
@@ -438,7 +442,7 @@ export function createDesigner(root, ctx) {
 
   // ------------------------------------------------------------------ dataset (instant preview + validation)
   function onGrid() {
-    return !S.ninf && !S.slab && !memberOverrides() && S.use === 3 && S.clear === 3 && S.fl === 200 && S.fw === 200 && S.g >= 10 && S.g <= 50 && S.i >= 10 && S.i <= 50 &&
+    return !nInf() && !slabT() && !memberOverrides() && S.use === 3 && S.clear === 3 && S.fl === 200 && S.fw === 200 && S.g >= 10 && S.g <= 50 && S.i >= 10 && S.i <= 50 &&
       (S.system === 'noncomposite' || [25, 50, 75].includes(S.pcc));
   }
   async function getDs(sys) { if (!ds[sys]) ds[sys] = await loadDataset(sys); return ds[sys]; }
@@ -473,7 +477,7 @@ export function createDesigner(root, ctx) {
     const r = res.request || {};
     return r.system === S.system && r.girder_span === S.g && r.infill_span === S.i && r.conc_type === S.conc && +r.deck_type === S.deck &&
       (S.system === 'noncomposite' || r.percent_comp === S.pcc) && r.building_use === S.use && r.clear_spans === S.clear &&
-      (r.num_infill || null) === (S.ninf || null) && (r.slab_total || null) === (S.slab || null) &&
+      (r.num_infill || null) === (nInf() || null) && (r.slab_total || null) === (slabT() || null) &&
       Object.values(MEMBER_OVR).every(f => (r[f] ?? null) === ((memberOverrides() || {})[f] ?? null));
   }
 
@@ -560,7 +564,7 @@ export function createDesigner(root, ctx) {
     renderQuick();
     if (!result.ok) {
       out.innerHTML = `<div class="verdict"><h3>No design for these inputs</h3><p class="muted small" style="margin:8px 0 0">${esc(result.error || '')}</p>
-        <p class="small">The solver could not size a deck or members that pass every check.${S.ninf || S.slab ? ' With your own beam count or slab depth, the deck table may have no deck that spans that far or carries that slab — try Auto, more beams or another depth.' : ' Try a shorter span, a deeper deck or less composite action.'}</p></div>`;
+        <p class="small">The solver could not size a deck or members that pass every check.${nInf() || slabT() ? ' With your own beam count or slab depth, the deck table may have no deck that spans that far or carries that slab — try Auto, more beams or another depth.' : ' Try a shorter span, a deeper deck or less composite action.'}</p></div>`;
       return;
     }
     const key = sel();
@@ -580,7 +584,7 @@ export function createDesigner(root, ctx) {
     const structural = calcInfo[res.system] ? C.structuralPass(calcInfo[res.system], v) : null;
 
     let html = `<div class="verdict fade-in">
-      <div class="v-top"><div><div class="tiny muted">${res.system === 'composite' ? 'Composite' : 'Non-composite'} · ${S.mode === 'check' ? 'your members' : 'optimized by the paper\'s solver'}</div>
+      <div class="v-top"><div><div class="tiny muted">${res.system === 'composite' ? 'Composite' : 'Non-composite'} · ${S.mode === 'check' ? 'your design' : 'optimized by the paper\'s solver'}</div>
       <h3>${esc(STATE_SHORT[key])}${key === 'best' ? ' <span class="star">★</span>' : ''}</h3></div>
       ${pass ? '<span class="pill pass">✓ meets 0.5 %g</span>' : '<span class="pill fail">✗ exceeds limit</span>'}</div>
       ${res.variant ? `<div class="warn-box" style="margin-top:8px"><b>Set by you</b> — ${esc(res.variant.note)}${res.variant.member && Object.keys(res.variant.member).length ? ' Your camber and studs apply to your members only; the optimizer’s states use the solver’s own values.' : ''}</div>` : ''}
@@ -702,7 +706,7 @@ export function createDesigner(root, ctx) {
           <div><dt>Carbon</dt><dd><b>${fmtFixed(ec.v, 2)}</b> ${ec.u}</dd></div>
         </dl>
         <div class="q-mem"><span class="muted">infill</span> ${esc(summ.infill)} <span class="muted">girder</span> ${esc(summ.girder)}${summ.add ? ` · +${summ.add}" topping` : ''}</div>
-        ${result.variant ? '<div class="q-note">Set by you — outside the paper\'s method.</div>' : ''}${open}`;
+        ${result.variant ? '<div class="q-note">Includes values set by you.</div>' : ''}${open}`;
     }
     $('#qOpen', q).onclick = () => {
       if (window.innerWidth <= 640) $('#dOut', root).scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -807,19 +811,36 @@ export function createDesigner(root, ctx) {
     const mo = {};
     if (k === 'check') for (const f of Object.values(MEMBER_OVR)) if (result.request?.[f] !== null && result.request?.[f] !== undefined) mo[f] = result.request[f];
     const mine = (f) => (mo[f] === undefined ? '' : ' <b style="color:var(--warn)">(set by you)</b>');
+    const useName = (window.__msveMeta?.systems?.[result.system]?.building_uses?.[result.request?.building_use] || [])[0] || 'occupancy';   // the solved request, not the live input
+    // where each value comes from: an input of the published sizer_and_calc (or the app's override), or a constant in its code
+    const IN = (t) => `<span class="src in">input: ${t}</span>`;
+    const FX = (t) => `<span class="src fx">${t}</span>`;
+    const userStuds = mo.studs_infill !== undefined || mo.studs_girder !== undefined;
+    const userCamber = mo.camber_infill !== undefined || mo.camber_girder !== undefined;
     const rows = [
-      ['Infill spacing', `${fmt(v.infill_spacing, 3)} ft (${v.NumInfill} interior infills), from the deck table`],
-      ['Deck / slab', `${esc(v.selected_deck)}; ${fmt(v.Deck_Type + v.selected_deck_topping_thickness + (v.Additional_Topping || 0), 2)} in total depth`],
-      comp ? ['Studs', `¾ in, F<sub>u</sub> = 65 ksi; infill ${fmt(v.min_req_studs_II, 0)}${mine('studs_infill')}, girder ${fmt(v.min_req_studs_IG, 0)}${mine('studs_girder')}${mo.studs_infill === undefined && mo.studs_girder === undefined ? ' (sized for the composite action)' : ''}`] : null,
-      ['Materials', `F<sub>y</sub> = ${v.Fy} ksi, E<sub>s</sub> = ${fmt(v.Es, 0)} ksi, f'<sub>c</sub> = ${v.f_prime_c} ksi, ${lw ? 'LWC 110' : 'NWC 145'} pcf`],
-      ['Loads', `LL ${v.LL} psf, SDL ${v.SDL} psf, construction LL 20 psf; LRFD 1.4D and 1.2D + 1.6L`],
-      ['Construction', comp ? `unshored: bare steel carries the wet concrete; camber ${mo.camber_infill === undefined && mo.camber_girder === undefined ? '0.8 × construction deflection (¼ in steps, spans ≥ 24 ft)' : `infill ${fmt(v.camber_II, 2)} in${mine('camber_infill')}, girder ${fmt(v.camber_IG, 2)} in${mine('camber_girder')}`}` : 'non-composite beams; deck braces the infill top flange'],
-      ['Vibration (DG 11)', `vibration LL ${v.live_load_vibrations} psf + ${fmt(v.dead_load, 0)} psf; β = ${v.DR}; limit ${v.tolerance_limit} %g; W<sub>j</sub> × 1.5 (continuous infills)`],
+      ['Infill spacing', `${fmt(v.infill_spacing, 3)} ft (${v.NumInfill} interior infills)`,
+        nInf() ? IN('Beams between girders (set by you)')
+          : FX(`solver's rule: widest spacing the deck table allows${S.mode === 'check' ? ' (Auto)' : '; set your own in Custom design'}`)],
+      ['Deck / slab', `${esc(v.selected_deck)}; ${fmt(v.Deck_Type + v.selected_deck_topping_thickness + (v.Additional_Topping || 0), 2)} in total depth`,
+        IN(`Deck rib depth, Concrete${slabT() ? ', Total slab depth (set by you)' : ''}`)
+          + (slabT() ? '' : ' ' + FX(`depth: lightest that works${S.mode === 'check' ? ' (Auto)' : '; set your own in Custom design'}`))],
+      comp ? ['Studs', `¾ in, F<sub>u</sub> = 65 ksi; infill ${fmt(v.min_req_studs_II, 0)}${mine('studs_infill')}, girder ${fmt(v.min_req_studs_IG, 0)}${mine('studs_girder')}`,
+        userStuds ? IN('Camber and studs (Custom design)') : IN('Degree of composite action (the solver sizes the studs to reach it)') + ' ' + FX('stud size and F<sub>u</sub> fixed in the code')] : null,
+      ['Materials', `F<sub>y</sub> = ${v.Fy} ksi, E<sub>s</sub> = ${fmt(v.Es, 0)} ksi, f'<sub>c</sub> = ${v.f_prime_c} ksi, ${lw ? 'LWC 110' : 'NWC 145'} pcf`,
+        IN('Concrete (density)') + ' ' + FX('F<sub>y</sub>, E<sub>s</sub>, f\'<sub>c</sub> fixed in the code')],
+      ['Loads', `LL ${v.LL} psf, SDL ${v.SDL} psf, construction LL 20 psf; LRFD 1.4D and 1.2D + 1.6L`,
+        IN(`Occupancy (${esc(useName)} → LL ${v.LL} psf)`) + ' ' + FX('SDL, construction LL and load combinations fixed in the code')],
+      ['Construction', comp ? `unshored: bare steel carries the wet concrete; camber ${userCamber ? `infill ${fmt(v.camber_II, 2)} in${mine('camber_infill')}, girder ${fmt(v.camber_IG, 2)} in${mine('camber_girder')}` : '0.8 × construction deflection (¼ in steps, spans ≥ 24 ft)'}` : 'non-composite beams; deck braces the infill top flange',
+        comp && userCamber ? IN('Camber and studs (Custom design)') : FX(comp ? 'camber rule fixed in the code; set your own in Custom design' : 'fixed in the code')],
+      ['Vibration (DG 11)', `vibration LL ${v.live_load_vibrations} psf + ${fmt(v.dead_load, 0)} psf; β = ${v.DR}; limit ${v.tolerance_limit} %g; W<sub>j</sub> × 1.5 (continuous infills)`,
+        IN(`Occupancy (vibration LL, β, limit from the DG 11 table)`) + ' ' + FX(`${fmt(v.dead_load, 0)} psf vibration dead load and W<sub>j</sub> × 1.5 fixed in the code`)],
     ].filter(Boolean);
-    const body = `<table>${rows.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('')}</table>`;
+    const body = `<table>${rows.map(([a, b, src]) => `<tr><td>${a}</td><td>${b}<div class="src-row">${src}</div></td></tr>`).join('')}</table>
+      <div class="tiny muted" style="margin-top:6px">Loads come from the occupancy, through the published solver's own table (as in the paper), not from free load inputs.</div>`;
+    const title = 'Design basis <span class="muted" style="font-weight:500">· what each value comes from</span>';
     el.innerHTML = S.mode === 'check'
-      ? `<div class="assume"><div class="field-label" style="margin-bottom:4px"><span>Fixed by the solver (not inputs)</span></div>${body}</div>`
-      : `<details class="assume"><summary class="small" style="cursor:pointer;font-weight:600;color:var(--text2)">Fixed by the solver (not inputs)</summary>${body}</details>`;
+      ? `<div class="assume"><div class="field-label" style="margin-bottom:4px"><span>${title}</span></div>${body}</div>`
+      : `<details class="assume"><summary class="small" style="cursor:pointer;font-weight:600;color:var(--text2)">${title}</summary>${body}</details>`;
   }
 
   // ------------------------------------------------------------------ viewport tools + HUD
@@ -983,7 +1004,7 @@ export function createDesigner(root, ctx) {
       html += '<table class="calc"><thead><tr><th></th><th>Output column</th><th>Internal variable</th><th class="right">Reported</th><th class="right">Captured</th></tr></thead><tbody>';
       for (const c of va.checks) html += `<tr><td class="chk">${c.ok === null ? '<span class="skip-ic">·</span>' : c.ok ? '<span class="ok-ic">✓</span>' : c.known_quirk ? '<span class="pill warn">quirk</span>' : '<span class="bad-ic">✗</span>'}</td><td>${esc(c.column)}</td><td><code>${esc(c.local)}</code></td><td class="v">${c.reported === null ? '<span class="muted">blank in frame</span>' : C.valueHTML(c.reported)}</td><td class="v">${C.valueHTML(c.captured)}</td></tr>${c.known_quirk ? `<tr><td></td><td colspan="4" class="small muted">${esc(c.known_quirk)}</td></tr>` : ''}`;
       html += '</tbody></table>';
-    } else html += '<div class="muted small">Not applicable to “Your members” — the solver reports no frame for a pair it did not pick; the line re-run below still applies.</div>';
+    } else html += '<div class="muted small">Not applicable to “Your design” — the solver reports no frame for a pair it did not pick; the line re-run below still applies.</div>';
     html += `<h4 style="margin:16px 0 6px">2 · Line-by-line re-execution</h4><div class="muted small" style="margin-bottom:6px">Every single-target assignment in <code>mitigation_method()</code> that is elementwise arithmetic is evaluated again with this pair's captured inputs. Elementwise numpy operations commute with indexing, so the result must equal the captured value of the target. Lines with table lookups, reductions across shapes or an untaken branch are listed as not re-evaluable.</div>`;
     const bad = Object.entries(rc.lines).filter(([, r]) => r[0] === false);
     html += bad.length ? bad.map(([ln, r]) => `<div class="code-line">L${ln} ${esc(ci.linesByNo[ln]?.var)} = ${esc(ci.linesByNo[ln]?.expr)}  → ${esc(JSON.stringify(r[1]))}</div>`).join('') : `<div class="pill pass">all ${rc.n_ok} re-evaluated lines reproduce the captured values</div>`;
