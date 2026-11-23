@@ -677,28 +677,45 @@ export class Bay3D {
     }
   }
 
+  // Plan dimensions drawn like a drawing: in the plane of the slab top, outside the bay on the two sides the default
+  // 3D view faces (+x and +z), with extension lines and 45° ticks. Flat strips rather than GL lines (which are one
+  // device pixel wide, invisible on high-DPI screens), drawn on top so the steel never hides them.
   _dims(m, top, gd) {
-    const mat = new THREE.LineBasicMaterial({ color: 0x9fb3c8, transparent: true, opacity: 0.8 });
-    const y = -(gd.d * IN) - 0.9;
-    const seg = (a, b) => new THREE.Line(new THREE.BufferGeometry().setFromPoints([a, b]), mat);
-    const tick = (p, dir) => seg(p.clone().addScaledVector(dir, -0.5), p.clone().addScaledVector(dir, 0.5));
-    // girder span along x, in front (z < 0)
-    const zf = -2.2;
-    this.dims.add(seg(new THREE.Vector3(0, y, zf), new THREE.Vector3(m.Lg, y, zf)));
-    this.dims.add(tick(new THREE.Vector3(0, y, zf), new THREE.Vector3(0, 1, 0)), tick(new THREE.Vector3(m.Lg, y, zf), new THREE.Vector3(0, 1, 0)));
-    this._label(new THREE.Vector3(m.Lg / 2, y, zf), `L<sub>g</sub> = ${m.Lg} ft`, 'dim', this.dims);
-    // infill span along z, on the right (x > Lg)
-    const xr = m.Lg + 2.2;
-    this.dims.add(seg(new THREE.Vector3(xr, y, 0), new THREE.Vector3(xr, y, m.Lj)));
-    this.dims.add(tick(new THREE.Vector3(xr, y, 0), new THREE.Vector3(0, 1, 0)), tick(new THREE.Vector3(xr, y, m.Lj), new THREE.Vector3(0, 1, 0)));
-    this._label(new THREE.Vector3(xr, y, m.Lj / 2), `L<sub>j</sub> = ${m.Lj} ft`, 'dim', this.dims);
-    // infill spacing between the first two infills
-    if (m.N >= 1) {
-      const zb = m.Lj + 2.2;
-      this.dims.add(seg(new THREE.Vector3(0, y, zb), new THREE.Vector3(m.s, y, zb)));
-      this.dims.add(tick(new THREE.Vector3(0, y, zb), new THREE.Vector3(0, 1, 0)), tick(new THREE.Vector3(m.s, y, zb), new THREE.Vector3(0, 1, 0)));
-      this._label(new THREE.Vector3(m.s / 2, y, zb), `s = ${fmt2(m.s)} ft`, 'dim', this.dims);
-    }
+    const R = Math.max(m.Lg, m.Lj);
+    const y = top + 0.02;
+    const w = Math.max(0.06, R * 0.004);              // strip width, ft
+    const off1 = Math.max(2.0, R * 0.075), off2 = off1 * 1.9, ext = Math.max(0.6, R * 0.02), gap = Math.max(0.35, R * 0.01);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xcfe3f3, transparent: true, opacity: 0.95, depthTest: false, depthWrite: false, side: THREE.DoubleSide });
+    const bar = (ax, az, bx, bz, width = w) => {
+      const dx = bx - ax, dz = bz - az, L = Math.hypot(dx, dz) || 1;
+      const px = -dz / L * width / 2, pz = dx / L * width / 2;
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute([
+        ax + px, y, az + pz, bx + px, y, bz + pz, bx - px, y, bz - pz,
+        ax + px, y, az + pz, bx - px, y, bz - pz, ax - px, y, az - pz], 3));
+      const mesh = new THREE.Mesh(g, mat);
+      mesh.renderOrder = 20;
+      this.dims.add(mesh);
+    };
+    const t = off1 * 0.16;                               // half-length of a 45° tick
+    const tick = (x, z) => bar(x - t, z - t, x + t, z + t, w * 1.6);
+    // a dimension along x at depth z (extension lines from zFrom), or along z at x (extension lines from xFrom)
+    const dimX = (x0, x1, z, zFrom, html) => {
+      bar(x0, z, x1, z);
+      for (const x of [x0, x1]) { bar(x, zFrom + gap, x, z + ext, w * 0.7); tick(x, z); }
+      this._label(new THREE.Vector3((x0 + x1) / 2, y, z), html, 'dim', this.dims);
+    };
+    const dimZ = (z0, z1, x, xFrom, html) => {
+      bar(x, z0, x, z1);
+      for (const z of [z0, z1]) { bar(xFrom + gap, z, x + ext, z, w * 0.7); tick(x, z); }
+      this._label(new THREE.Vector3(x, y, (z0 + z1) / 2), html, 'dim', this.dims);
+    };
+    // infill spacing s: the last bay of infills, on the inner row along the +z girder
+    if (m.N >= 1) dimX(m.Lg - m.s, m.Lg, m.Lj + off1, m.Lj, `s = ${fmt2(m.s)} ft`);
+    // girder span Lg: overall, outer row
+    dimX(0, m.Lg, m.Lj + (m.N >= 1 ? off2 : off1), m.Lj, `L<sub>g</sub> = ${m.Lg} ft`);
+    // infill span Lj, along the +x side
+    dimZ(0, m.Lj, m.Lg + off1, m.Lg, `L<sub>j</sub> = ${m.Lj} ft`);
   }
 
   _label(pos, html, kind, parent) {
@@ -773,7 +790,8 @@ export class Bay3D {
     // distance that fits the bay (plus the toolbar/HUD overlays) in this viewport, any aspect ratio
     const vfov = THREE.MathUtils.degToRad(this.camera.fov);
     const hfov = 2 * Math.atan(Math.tan(vfov / 2) * this.camera.aspect);
-    const fit = (0.5 * Math.hypot(Lg, Lj) + 1.5) * 1.18 / Math.sin(Math.min(vfov, hfov) / 2);
+    const dimsPad = this.layers.dims ? Math.max(2, R * 0.07) : 0;   // the plan dimensions sit outside the bay
+    const fit = (0.5 * Math.hypot(Lg, Lj) + 1.5 + dimsPad) * 1.18 / Math.sin(Math.min(vfov, hfov) / 2);
     const along = (x, y, z) => new THREE.Vector3(x, y, z).normalize().multiplyScalar(fit);
     let p;
     if (name === 'top') p = new THREE.Vector3(0.001, fit, 0.01);
