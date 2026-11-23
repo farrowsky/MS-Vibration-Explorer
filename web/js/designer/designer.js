@@ -674,7 +674,17 @@ export function createDesigner(root, ctx) {
     $('#toBig', out).onclick = () => openTradeoff();
     renderAssume();
     $$('.state', out).forEach(b => b.onclick = () => { if (b.disabled) return; S.view = b.dataset.st; writeHash(); renderAll(); });
-    $('#repBtn', out).onclick = () => openReport({ result, key: sel(), calcInfo: calcInfo[result.system], shapes, snapshot: bay.snapshot(), model: modelFor(result, sel()) });
+    $('#repBtn', out).onclick = () => {
+      // screenshots straight from the 3D view, each set up for the story it tells
+      const views = bay.captureViews([
+        { key: 'hero', view: 'iso', zoom: 0.72, floor: 'accel', layers: { labels: true, dims: true, panels: false }, title: '3D view, coloured by DG 11 peak acceleration' },
+        { key: 'plan', view: 'top', zoom: 0.8, floor: 'concrete', layers: { labels: true, dims: true, panels: false, xray: true }, title: 'Plan: framing, members and dimensions' },
+        { key: 'section', view: 'section', floor: 'concrete', layers: { labels: false, dims: false, panels: false }, title: 'Section through the slab, deck and girder at mid-span' },
+        { key: 'panels', view: 'top', zoom: 0.8, floor: 'mode', layers: { labels: true, dims: false, panels: true }, title: 'DG 11 mode shape with the effective panel widths B_j and B_g' },
+        { key: 'under', view: 'under', floor: 'concrete', layers: { labels: false, dims: false, panels: false, xray: false }, title: 'Underside: deck ribs, studs and connections' },
+      ]);
+      openReport({ result, key: sel(), calcInfo: calcInfo[result.system], shapes, views, model: modelFor(result, sel()) });
+    };
     $('#shareBtn', out).onclick = async () => { try { await navigator.clipboard.writeText(location.href); toast('Link copied — it reopens this exact design.'); } catch { toast(location.href); } };
     $('#jsonBtn', out).onclick = () => downloadText(`bay_${result.system}_${S.g}x${S.i}.json`, JSON.stringify(result, null, 1), 'application/json');
     $$('[data-goto-tab]', out).forEach(b => b.onclick = () => { tab = b.dataset.gotoTab; store.set('anTab', tab); openAnalysis(); });

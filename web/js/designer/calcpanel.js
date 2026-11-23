@@ -139,9 +139,9 @@ function itemSummary(item, cap) {
   const v = memberVal(vals[it.var], it.member);
   const unit = unitOf(it.var) || it.unit || '';
   return {
-    label: esc(it.label) + (it.member ? ` <span class="ctag">${it.member}</span>` : ''),
+    label: it.label + (it.member ? ` <span class="ctag">${it.member}</span>` : ''),     // calcmap labels are our own HTML (sup, √)
     right: `<span class="cv">${symHTML(it.var, { link: false })} = ${brief(v, unit)}</span>`,
-    text: `${it.label} ${it.var} ${(it.symbol || '').replace(/<[^>]+>/g, '')}`,
+    text: `${it.label.replace(/<[^>]+>/g, '')} ${it.var} ${(it.symbol || '').replace(/<[^>]+>/g, '')}`,
   };
 }
 

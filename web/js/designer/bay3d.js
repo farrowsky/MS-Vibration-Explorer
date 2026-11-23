@@ -991,6 +991,83 @@ export class Bay3D {
     }
   }
 
+  // Screenshots for the report: each { view, floor, layers, title } rendered at a fixed size with its labels drawn in,
+  // then the camera, overlay, layers, size and motion are put back exactly as they were.
+  captureViews(list, { width = 1400, height = 860 } = {}) {
+    if (!this.renderer || !this.model) return [];
+    const r = this.renderer, cam = this.camera, ctl = this.controls;
+    const saved = {
+      pos: cam.position.clone(), tgt: ctl.target.clone(), view: this.view, floor: this.floorMode, cut: this.cut,
+      layers: { ...this.layers }, motion: this.motion, ratio: r.getPixelRatio(), tw: this._tw,
+    };
+    this._tw = null;
+    if (this.motion !== 'still') this.setMotion('still');
+    if (this._growT !== undefined && this._growT < 1) {        // finish the build-in animation
+      this._growT = 1; this.members.scale.y = 1; this.slab.position.y = 0; this.mat.floor.opacity = 1;
+    }
+    r.setPixelRatio(1);
+    r.setSize(width, height, false);
+    cam.aspect = width / height;
+    cam.updateProjectionMatrix();
+    const out = [];
+    try {
+      for (const s of list) {
+        Object.assign(this.layers, saved.layers, s.layers || {});
+        this._applyLayers();
+        this.setFloorMode(s.floor || saved.floor);
+        this.floorU.uPhase.value = this.floorMode === 'defl' ? 1 : 0;
+        this.setView(s.view, false);
+        if (s.zoom) cam.position.sub(ctl.target).multiplyScalar(s.zoom).add(ctl.target);   // tighter framing for a still
+        ctl.update();
+        r.render(this.scene, cam);
+        out.push({ ...s, src: this._compositeLabels(width, height) });
+      }
+    } finally {
+      r.setPixelRatio(saved.ratio);
+      Object.assign(this.layers, saved.layers);
+      this._applyLayers();
+      this.setFloorMode(saved.floor);
+      this.view = saved.view;
+      this.setSection(saved.cut || 0);
+      this.opts.onSection?.(saved.cut || 0);
+      this._resize();
+      cam.position.copy(saved.pos); ctl.target.copy(saved.tgt); ctl.update();
+      this._tw = saved.tw;
+      if (saved.motion !== 'still') this.setMotion(saved.motion);
+    }
+    return out;
+  }
+
+  // the WebGL frame plus the HTML labels (dimensions, member tags), drawn as the app draws them
+  _compositeLabels(w, h) {
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const g = c.getContext('2d');
+    g.drawImage(this.renderer.domElement, 0, 0, w, h);
+    if (this.layers.labels) {
+      const v = new THREE.Vector3();
+      g.font = '600 15px -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
+      g.textBaseline = 'middle';
+      for (const l of this.labels) {
+        if (l.parent && !l.parent.visible) continue;
+        v.copy(l.pos).add(this.root.position).project(this.camera);
+        if (v.z > 1 || v.z < -1) continue;
+        const x = (v.x + 1) / 2 * w, y = (1 - v.y) / 2 * h;
+        if (x < -50 || x > w + 50 || y < -20 || y > h + 20) continue;
+        const text = l.el.textContent.replace(/\s+/g, ' ').trim();
+        const tw = g.measureText(text).width, bw = tw + 16, bh = 26;
+        const bx = x - bw / 2, by = l.kind === 'dim' ? y - bh / 2 : y - bh;      // .lbl.dim is centred, others sit above
+        g.fillStyle = l.kind === 'dim' ? 'rgba(10,14,19,.72)' : 'rgba(10,14,19,.85)';
+        g.strokeStyle = { girder: 'rgba(252,174,46,.8)', infill: 'rgba(133,193,233,.8)', panel: 'rgba(163,179,118,.85)' }[l.kind] || 'rgba(255,255,255,.18)';
+        g.lineWidth = 1.5;
+        g.beginPath(); g.roundRect(bx, by, bw, bh, 6); g.fill(); g.stroke();
+        g.fillStyle = l.kind === 'dim' ? '#cfe3f3' : '#e7edf3';
+        g.fillText(text, bx + 8, by + bh / 2 + 1);
+      }
+    }
+    return c.toDataURL('image/jpeg', 0.9);
+  }
+
   snapshot() {
     if (!this.renderer) return null;
     this.renderer.render(this.scene, this.camera);
