@@ -40,14 +40,15 @@ export function createDesigner(root, ctx) {
         <div class="vp-bottom" id="vpBottom"></div>
         <div class="vp-overlay" id="vpOverlay"></div>
       </div>
-      <div class="resize-handle" id="anResize" title="Drag to resize"></div>
-      <div class="analysis" id="an">
-        <div class="an-tabs" id="anTabs"></div>
-        <div class="an-body stale-dim" id="anBody"><div class="muted">Run the solver to see every calculation.</div></div>
-      </div>
     </div>
     <aside class="d-right" id="dOut"><div class="muted" style="padding:10px">Starting the solver…</div></aside>
-  </div>`;
+  </div>
+  <dialog class="dlg an-dlg" id="anDlg" aria-label="Engine details">
+    <div class="analysis" id="an">
+      <div class="an-tabs" id="anTabs"></div>
+      <div class="an-body" id="anBody"><div class="muted">Run the solver to see every calculation.</div></div>
+    </div>
+  </dialog>`;
 
   columnSplitters(root.querySelector('.designer'), 'cols.designer');
   const vp = $('#vp', root);
@@ -646,6 +647,7 @@ export function createDesigner(root, ctx) {
 
     html += `<div class="row" style="margin-top:12px;flex-wrap:wrap">
       <button class="btn btn-primary" id="repBtn">Calc report</button>
+      <button class="btn" id="engBtn" data-goto-tab="valid" title="Validation, every captured engine variable and the solver source">Engine details</button>
       <button class="btn" id="shareBtn" title="Copy a link to this design">Copy link</button>
       <button class="btn btn-ghost" id="jsonBtn" title="Every captured value as JSON">JSON</button></div>
       <div class="tiny muted" style="margin-top:10px">Engine: <code>${esc(res.engine.notebook)}</code> solver cell, SHA-256 ${esc(res.engine.solver_cell_sha256.slice(0, 12))}… · Python ${esc(res.engine.python)}, numpy ${esc(res.engine.numpy)}, pandas ${esc(res.engine.pandas)}</div>`;
@@ -655,7 +657,7 @@ export function createDesigner(root, ctx) {
     if (calcCard) {
       calcApi = mountCalcs($('#calcBody', out), {
         ci: calcInfo[res.system], cap, mode: S.mode, state: calcState,
-        onSource: (line) => { tab = 'source'; srcLine = line; store.set('anTab', tab); renderAnalysis(); },
+        onSource: (line) => { tab = 'source'; srcLine = line; store.set('anTab', tab); openAnalysis(); },
         onMissingVar: (nm) => jumpVar(nm),
       });
     }
@@ -666,7 +668,7 @@ export function createDesigner(root, ctx) {
     $('#repBtn', out).onclick = () => openReport({ result, key: sel(), calcInfo: calcInfo[result.system], shapes, snapshot: bay.snapshot(), model: modelFor(result, sel()) });
     $('#shareBtn', out).onclick = async () => { try { await navigator.clipboard.writeText(location.href); toast('Link copied — it reopens this exact design.'); } catch { toast(location.href); } };
     $('#jsonBtn', out).onclick = () => downloadText(`bay_${result.system}_${S.g}x${S.i}.json`, JSON.stringify(result, null, 1), 'application/json');
-    $$('[data-goto-tab]', out).forEach(b => b.onclick = () => { tab = b.dataset.gotoTab; store.set('anTab', tab); renderAnalysis(); $('#an', root).scrollIntoView({ behavior: 'smooth', block: 'nearest' }); });
+    $$('[data-goto-tab]', out).forEach(b => b.onclick = () => { tab = b.dataset.gotoTab; store.set('anTab', tab); openAnalysis(); });
   }
 
   // ------------------------------------------------------------------ quick result card
@@ -895,7 +897,14 @@ export function createDesigner(root, ctx) {
 
   // ------------------------------------------------------------------ analysis tabs
   const TABS = [['valid', 'Validation'], ['vars', 'Engine variables'], ['source', 'Solver source']];
+  // Validation / Engine variables / Solver source live in a dialog, so the 3D view keeps the full centre column.
+  function openAnalysis() {
+    const dlg = $('#anDlg', root);
+    if (!dlg.open) dlg.showModal();
+    renderAnalysis();
+  }
   function renderAnalysis() {
+    if (!$('#anDlg', root).open) return;      // rendered when opened
     const tabs = $('#anTabs', root);
     const k = sel();
     const cap = result?.ok && k ? result.captured[k] : null;
@@ -905,8 +914,10 @@ export function createDesigner(root, ctx) {
       return '';
     };
     tabs.innerHTML = TABS.map(([id, t]) => `<button data-tab="${id}" class="${tab === id ? 'on' : ''}">${t}${badge(id)}</button>`).join('') +
-      `<span class="spacer"></span><span class="tiny muted" style="white-space:nowrap">${cap ? `${esc(STATE_SHORT[k])} · ${Object.keys(cap.values).length} captured values` : ''}</span>`;
+      `<span class="spacer"></span><span class="tiny muted" style="white-space:nowrap">${cap ? `${esc(STATE_SHORT[k])} · ${Object.keys(cap.values).length} captured values` : ''}</span>` +
+      `<button class="icon-btn" id="anClose" aria-label="Close" title="Close (Esc)">✕</button>`;
     $$('[data-tab]', tabs).forEach(b => b.onclick = () => { tab = b.dataset.tab; store.set('anTab', tab); renderAnalysis(); });
+    $('#anClose', tabs).onclick = () => $('#anDlg', root).close();
     const body = $('#anBody', root);
     if (!cap) { body.innerHTML = `<div class="muted">${result && !result.ok ? 'No design — nothing to show.' : 'Run the solver to see every calculation.'}</div>`; return; }
     const ci = calcInfo[result.system];
@@ -935,7 +946,7 @@ export function createDesigner(root, ctx) {
 
   function jumpVar(nm) {
     tab = 'vars'; varFilter = nm;
-    renderAnalysis();
+    openAnalysis();
     const row = $(`#anBody tr.calc-row[data-var="${CSS.escape(nm)}"]`, root);
     if (row) { row.click(); row.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
   }
@@ -986,16 +997,8 @@ export function createDesigner(root, ctx) {
     return html;
   }
 
-  // ------------------------------------------------------------------ resize handle for the analysis panel
-  (() => {
-    const hdl = $('#anResize', root), an = $('#an', root);
-    let y0, h0;
-    const saved = store.get('anH', null);
-    if (saved) an.style.height = saved + 'px';
-    hdl.onpointerdown = (e) => { y0 = e.clientY; h0 = an.getBoundingClientRect().height; hdl.setPointerCapture(e.pointerId); };
-    hdl.onpointermove = (e) => { if (y0 === undefined) return; const hh = Math.max(120, Math.min(window.innerHeight * 0.8, h0 + (y0 - e.clientY))); an.style.height = hh + 'px'; };
-    hdl.onpointerup = () => { if (y0 !== undefined) store.set('anH', an.getBoundingClientRect().height); y0 = undefined; };
-  })();
+  // close the engine-details dialog on a backdrop click
+  $('#anDlg', root).addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 
   onUnits(() => { if (result) { renderResults(); } syncInputs(); });
 

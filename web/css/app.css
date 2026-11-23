@@ -242,16 +242,15 @@ select:focus, .text-in:focus { border-color: var(--accent); }
 @keyframes spin { to { transform: rotate(360deg); } }
 .webgl-msg { max-width: 420px; text-align: center; color: var(--text2); padding: 20px; pointer-events: auto; }
 
-/* lower analysis area */
-.analysis { flex: 0 0 auto; height: 40%; min-height: 220px; border-top: 1px solid var(--line); background: var(--bg2); display: flex; flex-direction: column; }
-.analysis.collapsed { height: 42px; min-height: 42px; }
+/* engine details dialog: Validation / Engine variables / Solver source (keeps the 3D view full height) */
+.dlg.an-dlg { width: min(1150px, 94vw); max-width: none; height: min(86vh, 900px); overflow: hidden; }
+.analysis { height: 100%; background: var(--bg2); display: flex; flex-direction: column; }
 .an-tabs { display: flex; align-items: center; gap: 2px; padding: 6px 10px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.an-tabs #anClose { margin-left: 6px; flex: 0 0 auto; }
 .an-tabs button { border: 0; background: transparent; color: var(--text2); padding: 6px 10px; border-radius: 7px; cursor: pointer; font-weight: 600; white-space: nowrap; font-size: 13px; }
 .an-tabs button.on { background: var(--panel2); color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }
 .an-tabs .badge { margin-left: 6px; }
 .an-body { flex: 1; overflow: auto; padding: 12px 14px 40px; }
-.resize-handle { height: 6px; cursor: ns-resize; background: transparent; margin-top: -3px; position: relative; z-index: 5; }
-.resize-handle:hover { background: color-mix(in srgb, var(--accent) 40%, transparent); }
 
 /* ---------- inputs panel ---------- */
 .panel-title { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; margin: 4px 0 10px; display: flex; align-items: center; gap: 8px; }
@@ -614,7 +613,6 @@ body.col-dragging, body.col-dragging * { cursor: col-resize !important; user-sel
   .d-right, .x-right { position: static; width: auto; transform: none; box-shadow: none; overflow: visible; }
   .side-toggle { display: none !important; }
   .viewport { min-height: 62vh; }
-  .analysis { height: auto; min-height: 0; }
   .x-stage { min-height: 70vh; }
   .run-row { position: static; }
   .tabs a .tab-num { display: none; }
