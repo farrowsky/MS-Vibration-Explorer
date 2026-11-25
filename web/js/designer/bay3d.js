@@ -67,6 +67,8 @@ float ripples(vec2 p) {
 }
 `;
 
+const WALK_BOX = new THREE.Box3();
+
 function patchDisplacement(mat, U, { ripple = false } = {}) {
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, U);
@@ -155,7 +157,7 @@ export class Bay3D {
     this.tVis = 0;
     this.ripIdx = 0;
     this.walker = null;
-    this.walkState = { s: 0, lastStep: 0, side: 1, resp: 0 };
+    this.walkState = { s: 0, gait: 0, step: 0, resp: 0, prints: [], x: 0, z: 0, feet: null };
     this.liveAccel = 0;
     this._initRenderer();
   }
@@ -897,26 +899,64 @@ export class Bay3D {
     }
   }
 
+  // a jointed walker (about 5.8 ft): pelvis, torso, head; legs with hip / knee / ankle; arms with shoulder / elbow.
+  // Feet stay on the floor: the body drops with the stance leg's angle, and the whole figure rides the floor's
+  // displacement (_placeWalker), so it moves with the vibrating slab instead of floating above it.
   _startWalk() {
     if (!this.model || this.walker) return;
+    const M = (color, rough = 0.6) => new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: 0.05 });
+    const shirt = M(0xfcae2e, 0.55), pants = M(0x3c4a58), shoe = M(0x1d2a36, 0.5), skin = M(0xd9c2a7, 0.7);
+    const part = (geo, mat, x, y, z, parent) => { const o = new THREE.Mesh(geo, mat); o.position.set(x, y, z); o.castShadow = true; parent.add(o); return o; };
+    const pivot = (x, y, z, parent) => { const p = new THREE.Group(); p.position.set(x, y, z); parent.add(p); return p; };
     const g = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.42, 2.6, 6, 12), new THREE.MeshStandardMaterial({ color: 0xfcae2e, roughness: 0.5, emissive: 0x3a2400 }));
-    body.position.y = 1.75;
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 12), new THREE.MeshStandardMaterial({ color: 0xfcae2e, roughness: 0.4, emissive: 0x3a2400 }));
-    head.position.y = 3.65;
-    body.castShadow = head.castShadow = true;
-    g.add(body, head);
+    const body = pivot(0, 0, 0, g);
+    const LEG = 3.0, THIGH = 1.5, SHIN = 1.43;
+    const legs = [], arms = [];
+    for (const side of [1, -1]) {
+      const hip = pivot(0, LEG, side * 0.3, body);
+      part(new THREE.CapsuleGeometry(0.18, THIGH - 0.36, 4, 10), pants, 0, -THIGH / 2, 0, hip);
+      const knee = pivot(0, -THIGH, 0, hip);
+      part(new THREE.SphereGeometry(0.155, 10, 8), pants, 0, 0, 0, knee);   // knee joint
+      part(new THREE.CapsuleGeometry(0.14, SHIN - 0.28, 4, 10), pants, 0, -SHIN / 2, 0, knee);
+      const ankle = pivot(0, -SHIN, 0, knee);
+      part(new THREE.BoxGeometry(0.78, 0.15, 0.3), shoe, 0.2, 0, 0, ankle);
+      legs.push({ hip, knee, ankle, side });
+    }
+    part(new THREE.SphereGeometry(0.42, 14, 10), pants, 0, LEG + 0.05, 0, body).scale.set(0.8, 0.6, 1.15);    // pelvis
+    part(new THREE.CapsuleGeometry(0.42, 1.15, 6, 14), shirt, 0, LEG + 0.95, 0, body).scale.set(0.72, 1, 1.5); // torso
+    part(new THREE.CylinderGeometry(0.12, 0.14, 0.3, 10), skin, 0, LEG + 1.95, 0, body);                      // neck
+    part(new THREE.SphereGeometry(0.34, 16, 12), skin, 0.02, LEG + 2.36, 0, body).scale.set(1, 1.12, 0.95);   // head
+    for (const side of [1, -1]) {
+      const sh = pivot(0, LEG + 1.68, side * 0.74, body);
+      part(new THREE.CapsuleGeometry(0.13, 0.72, 4, 10), shirt, 0, -0.5, 0, sh);
+      const el = pivot(0, -1.0, 0, sh);
+      part(new THREE.SphereGeometry(0.11, 10, 8), skin, 0, 0, 0, el);       // elbow joint
+      part(new THREE.CapsuleGeometry(0.1, 0.68, 4, 10), skin, 0, -0.45, 0, el);
+      part(new THREE.SphereGeometry(0.12, 10, 8), skin, 0, -0.92, 0, el);
+      arms.push({ sh, el, side });
+    }
     this.walker = g;
+    this.walkerRig = { body, legs, arms, LEG };
     this.root.add(g);
-    this.walkState = { s: 0, lastStep: 0, side: 1, resp: 0, prints: [] };
+    this.walkState = { s: 0, gait: 0, step: 0, resp: 0, prints: [], x: 0, z: 0, feet: null };
     if (this.floorMode === 'concrete') this.setFloorMode('accel');   // the walk is shown on the Peak accel. overlay
   }
   _stopWalk() {
-    if (this.walker) { this.root.remove(this.walker); this.walker = null; }
+    if (this.walker) { this.root.remove(this.walker); this.walker = null; this.walkerRig = null; }
     if (this.model) this.floorU.uAp.value = this.model.vib?.ap || 0;   // back to the solver's a_p
     this.liveAccel = 0;
-    (this.walkState.prints || []).forEach(p => { this.root.remove(p.mesh); p.mesh.geometry.dispose(); });
+    (this.walkState.prints || []).forEach(p => { this.root.remove(p.mesh); p.mesh.geometry.dispose(); p.mesh.material.dispose(); });
     this.walkState.prints = [];
+  }
+  // the floor's vertical displacement at a bay point, exactly as the vertex shaders apply it
+  _floorDisp(bx, bz) { return this.U.uAmp.value * this.U.uPhase.value * this.phiAt(bx, bz); }
+  _placeWalker() {
+    const W = this.walkState;
+    if (!this.walker) return;
+    let y = -Infinity;
+    for (const f of W.feet || [{ low: 0, x: W.x, z: W.z }]) y = Math.max(y, this.slabTop - this._floorDisp(f.x, f.z) - f.low);
+    this.walker.position.set(W.x, y, W.z);
+    for (const p of W.prints) p.mesh.position.y = this.slabTop + 0.03 - this._floorDisp(p.x, p.z);
   }
 
   // -------------------------------------------------------------------------
@@ -940,6 +980,7 @@ export class Bay3D {
       else if (this.floorMode === 'defl') phase = 1;
       U.uPhase.value = phase;
       U.uAmp.value = dtot * this.exag;
+      if (this.motion === 'walk') this._placeWalker();   // the walker rides the floor's displacement
       if (this._growT !== undefined && this._growT < 1) {
         this._growT = Math.min(1, this._growT + dt * 2.2);
         const k = 1 - Math.pow(1 - this._growT, 3);
@@ -953,44 +994,70 @@ export class Bay3D {
   }
 
   _walkFrame(dt) {
-    const m = this.model, W = this.walkState;
+    const m = this.model, W = this.walkState, R = this.walkerRig;
     const vib = m.vib || {};
-    // walk along the bay centreline, parallel to the girders, back and forth
-    const speed = 2.4 * this.slow * 4;          // ft per visual second (slow-motion scaled)
-    W.s += dt * speed;
-    const L = m.Lg + 8;
-    const u = (W.s % (2 * L)) / L;
+    // walk along the bay centreline, parallel to the girders, back and forth, turning inside the bay
+    const STEP = 2.2;                                    // ft per step; speed = pace x step length
+    const dx = dt * this.stepHz * STEP * this.slow * 4;  // slow-motion scaled, like the floor's motion
+    W.s += dx;
+    const edge = Math.min(1.6, m.Lg * 0.08), span = Math.max(1, m.Lg - 2 * edge);
+    const u = (W.s % (2 * span)) / span;
     const dir = u < 1 ? 1 : -1;
-    const x = (u < 1 ? u : 2 - u) * L - 4;
-    const z = m.Lj / 2;
-    this.walker.position.set(x, this.slabTop, z);
+    W.x = edge + (u < 1 ? u : 2 - u) * span;
+    W.z = m.Lj / 2;
     this.walker.rotation.y = dir > 0 ? 0 : PI;
-    const stepT = 1 / (this.stepHz * this.slow * 4);
-    W.lastStep += dt;
-    if (W.lastStep > stepT) {
-      W.lastStep = 0;
-      W.side *= -1;
-      const fz = z + W.side * 0.45;
-      if (x > 0 && x < m.Lg) {
-        this.stomp(x, fz, 0.6);
+    // gait: one step = half a cycle. Hips swing as a pendulum, the knee flexes in the swing phase, arms counter-swing.
+    W.gait += dx / STEP * PI;
+    const A = Math.asin(Math.min(0.9, STEP / 2 / R.LEG));
+    for (const L of R.legs) {
+      const p = W.gait + (L.side > 0 ? 0 : PI);
+      const hip = A * Math.sin(p), swing = Math.max(0, Math.cos(p));
+      const knee = 0.08 + 0.75 * swing * swing;
+      L.hip.rotation.z = hip;
+      L.knee.rotation.z = -knee;
+      const stance = Math.cos(p) <= 0;
+      L.ankle.rotation.z = -(hip - knee) * (stance ? 1 : 0.6);   // stance foot flat on the floor, swing foot toes down
+    }
+    for (const a of R.arms) {
+      const p = W.gait + (a.side > 0 ? PI : 0);
+      a.sh.rotation.z = 0.7 * A * Math.sin(p);
+      a.el.rotation.z = 0.25 + 0.2 * Math.max(0, Math.sin(p));
+    }
+    // shoe bottoms relative to the walker's origin, and where they are on the floor; _placeWalker sets the height so
+    // that no shoe goes into the (moving, sagging) floor and the planted one stands on it
+    this.walker.updateMatrixWorld(true);
+    W.feet = R.legs.map(L => {
+      WALK_BOX.setFromObject(L.ankle.children[0]);
+      return { low: WALK_BOX.min.y - this.root.position.y - this.walker.position.y,
+        x: (WALK_BOX.min.x + WALK_BOX.max.x) / 2 - this.root.position.x, z: (WALK_BOX.min.z + WALK_BOX.max.z) / 2 - this.root.position.z };
+    });
+    // a footfall each time a foot lands: footprint and ripple where it lands
+    const step = Math.floor(W.gait / PI);
+    if (step !== W.step) {
+      W.step = step;
+      const side = step % 2 ? 1 : -1;
+      const fx = W.x + dir * STEP / 2 * 0.9, fz = W.z + side * 0.3;
+      if (fx > 0 && fx < m.Lg) {
+        this.stomp(fx, fz, 0.6);
         const fp = new THREE.Mesh(new THREE.CircleGeometry(0.32, 16), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false }));
         fp.rotation.x = -PI / 2;
-        fp.scale.set(1, 1.7, 1);
-        fp.position.set(x, this.slabTop + 0.03, fz);
+        fp.scale.set(1.7, 1, 1);
+        fp.position.set(fx, this.slabTop + 0.03, fz);
         this.root.add(fp);
-        W.prints.push({ mesh: fp, age: 0 });
+        W.prints.push({ mesh: fp, age: 0, x: fx, z: fz });
       }
     }
     for (const p of W.prints) { p.age += dt; p.mesh.material.opacity = Math.max(0, 0.85 - p.age * 0.35); }
     while (W.prints.length && W.prints[0].age > 2.6) { const p = W.prints.shift(); this.root.remove(p.mesh); p.mesh.geometry.dispose(); p.mesh.material.dispose(); }
-    // response at mid-bay builds toward DG 11's a_p scaled by the walker's modal position
-    const target = this.phiAt(x, z);
-    W.resp += (target - W.resp) * Math.min(1, dt * 1.8);
+    // response at mid-bay builds toward DG 11's a_p scaled by the walker's modal position (per foot walked, so the
+    // build-up does not depend on the pace or the slow-motion speed)
+    const target = this.phiAt(W.x, W.z);
+    W.resp += (target - W.resp) * Math.min(1, dx * 1.0);
     this.liveAccel = (vib.ap || 0) * W.resp;
     // the Peak accel. overlay follows the walker: a_p x phi(walker) x phi(x, z). With the walker at mid-bay and the
     // response built up it is exactly the static DG 11 picture (the solver's a_p); it never exceeds it.
     this.floorU.uAp.value = this.liveAccel;
-    this.opts.onWalk?.({ x, z, resp: W.resp, accel: this.liveAccel });
+    this.opts.onWalk?.({ x: W.x, z: W.z, resp: W.resp, accel: this.liveAccel });
     return W.resp;
   }
 
