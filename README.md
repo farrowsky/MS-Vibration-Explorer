@@ -115,6 +115,8 @@ python tools/build_web_data.py --release ../MS-Vibration-Code --figures "../Pape
 python -m pytest -q                                          # in-repo checks (~1 min)
 MSVE_RELEASE=../MS-Vibration-Code python -m pytest -q        # + agreement with the published CSVs
 python tools/verify_release.py --release ../MS-Vibration-Code --n 200    # larger random sample
+python tools/check_original.py --release ../MS-Vibration-Code         # 100 LHS + 100 boundary cases vs the original notebooks
+python tools/check_hand_calcs.py                                     # the thesis hand calcs vs the report
 ```
 
 ## Hosting
