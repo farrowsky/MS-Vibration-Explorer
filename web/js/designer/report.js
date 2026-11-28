@@ -14,6 +14,11 @@ const SHORT = { initial: 'Initial', infill: 'Upsize infills', girder: 'Upsize gi
 const STATE_COLOR = { initial: '#8b98a5', infill: '#85C1E9', girder: '#FCAE2E', conc: '#E57373', steel: '#4178BE', best: '#A3B376', check: '#14202b' };
 const fig = (body, caption, n) => body ? `<figure class="figbox">${body}<figcaption><b>Figure ${n}.</b> ${caption}</figcaption></figure>` : '';
 
+// the watermark: one letter-size page, NOT FOR DESIGN along its diagonal, pale red
+const WM_SVG = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 850 1100" width="850" height="1100">'
+  + '<text x="425" y="550" text-anchor="middle" dominant-baseline="middle" transform="rotate(-52 425 550)" textLength="1150" lengthAdjust="spacingAndGlyphs" '
+  + 'font-family="Segoe UI, Roboto, Arial, sans-serif" font-weight="900" font-size="150" fill="#fbe8e8">NOT FOR DESIGN</text></svg>');
+
 const CSS = `
 :root{--pass:#5f7d22;--fail:#b83c3c;--warn:#b37400;--muted:#5d6b78;--line:#d6dde5;--text:#14202b;--text2:#33424f;--panel:#f6f8fa;--code-bg:#f4f6f9;--accent:#2f6db5;--c2:#2f6db5}
 *{box-sizing:border-box} body{font:11.5px/1.45 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:var(--text);margin:0;background:#e9edf2}
@@ -54,8 +59,10 @@ table.inputs tr.grp td{font-size:9.5px;text-transform:uppercase;letter-spacing:.
 @media print{body{background:#fff}.toolbar{display:none}.page{padding:0;max-width:none}h2{break-after:avoid}.pagebreak{break-before:page}
   .runfoot{position:fixed;bottom:-10mm;left:0;right:0;font-size:8.5px;color:#6a7988;text-align:center}}
 .runfoot{display:none} @media print{.runfoot{display:block}}
-.wm{position:fixed;inset:0;display:grid;place-items:center;pointer-events:none;z-index:50;overflow:hidden;mix-blend-mode:multiply}
-.wm span{transform:rotate(-40deg);font:900 min(calc(7.5vw + 5vh),150px)/1 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;letter-spacing:.04em;color:#f3c9c9;white-space:nowrap;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.page{position:relative}
+.wm-sheet{position:absolute;inset:0;pointer-events:none;z-index:50;mix-blend-mode:multiply;background:url("${WM_SVG}") center top/100% auto repeat-y}
+.wm{display:none}
+@media print{.wm-sheet{display:none}.wm{display:grid;position:fixed;inset:0;place-items:center;pointer-events:none;z-index:50;mix-blend-mode:multiply}.wm img{width:100%;height:100%;object-fit:contain;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 /* Mathcad-style regions (same renderer as the app's Calculations panel) */
 :root{--info:#2f6db5;--font:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--mono:Consolas,Menlo,monospace}
 .calc-item{break-inside:avoid;margin:0 0 8px;padding:0 0 8px;border-bottom:1px dotted var(--line)}
@@ -215,9 +222,9 @@ export function buildReport({ result: res, key, calcInfo, shapes, views = [], mo
 
   const doc = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Calc report — ${esc(title)}</title><style>${CSS}</style></head><body>
 <div class="toolbar"><b>Calculation report</b><span class="spacer"></span><button onclick="window.print()">Print / save as PDF</button><button class="alt" id="dl">Download HTML</button></div>
-<div class="wm" aria-hidden="true"><span>NOT FOR DESIGN</span></div>
+<div class="wm" aria-hidden="true"><img src="${WM_SVG}" alt=""></div>
 <div class="runfoot"><b>${APP_NAME} ${esc(res.tool_version)} — research showcase, NOT FOR DESIGN.</b> ${esc(title)} · generated ${esc(res.generated_utc)} · solver cell SHA-256 ${esc(res.engine.solver_cell_sha256.slice(0, 16))}… · farrowsky.github.io/parafloor</div>
-<div class="page">
+<div class="page"><div class="wm-sheet" aria-hidden="true"></div>
 <div class="row"><div><div class="muted small">${APP_NAME} · calculation report</div><h1>${esc(title)}</h1>
 <div class="muted small">Generated ${esc(res.generated_utc)} · tool ${esc(res.tool_version)} · ${esc(res.engine.notebook)}</div></div></div>
 <div class="rainbow"></div>
