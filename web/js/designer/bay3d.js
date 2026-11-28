@@ -938,11 +938,23 @@ export class Bay3D {
     this.walker = g;
     this.walkerRig = { body, legs, arms, LEG };
     this.root.add(g);
-    this.walkState = { s: 0, gait: 0, step: 0, resp: 0, prints: [], x: 0, z: 0, feet: null };
+    // landings: the walker steps off the bay onto the adjacent floor (not modelled, so it does not move) and waits
+    const m = this.model, OFF = 7, wide = Math.min(6, m.Lj * 0.4);
+    this.landing = new THREE.Group();
+    const lmat = new THREE.MeshStandardMaterial({ color: 0x8b98a5, roughness: 0.9, transparent: true, opacity: 0.35, depthWrite: false });
+    for (const x0 of [-OFF - 0.5, m.Lg]) {
+      const slab = new THREE.Mesh(new THREE.BoxGeometry(OFF + 0.5, 0.25, wide), lmat);
+      slab.position.set(x0 + (OFF + 0.5) / 2, this.slabTop - 0.125, m.Lj / 2);
+      slab.receiveShadow = true;
+      this.landing.add(slab);
+    }
+    this.root.add(this.landing);
+    this.walkState = { s: 0, gait: 0, step: 0, resp: 0, prints: [], x: -5, z: m.Lj / 2, feet: null, dir: 1, pause: 0 };
     if (this.floorMode === 'concrete') this.setFloorMode('accel');   // the walk is shown on the Peak accel. overlay
   }
   _stopWalk() {
     if (this.walker) { this.root.remove(this.walker); this.walker = null; this.walkerRig = null; }
+    if (this.landing) { this.landing.traverse(o => { o.geometry?.dispose(); o.material?.dispose?.(); }); this.root.remove(this.landing); this.landing = null; }
     if (this.model) this.floorU.uAp.value = this.model.vib?.ap || 0;   // back to the solver's a_p
     this.liveAccel = 0;
     (this.walkState.prints || []).forEach(p => { this.root.remove(p.mesh); p.mesh.geometry.dispose(); p.mesh.material.dispose(); });
@@ -996,32 +1008,47 @@ export class Bay3D {
   _walkFrame(dt) {
     const m = this.model, W = this.walkState, R = this.walkerRig;
     const vib = m.vib || {};
-    // walk along the bay centreline, parallel to the girders, back and forth, turning inside the bay
+    // One clock for walking, footfalls and the build-up: real time x the slow-motion factor (x 4, so a crossing takes
+    // seconds). The floor's oscillation is slowed further only so it can be seen; its timing does not enter the response.
+    const dtP = dt * this.slow * 4;
     const STEP = 2.2;                                    // ft per step; speed = pace x step length
-    const dx = dt * this.stepHz * STEP * this.slow * 4;  // slow-motion scaled, like the floor's motion
-    W.s += dx;
-    const edge = Math.min(1.6, m.Lg * 0.08), span = Math.max(1, m.Lg - 2 * edge);
-    const u = (W.s % (2 * span)) / span;
-    const dir = u < 1 ? 1 : -1;
-    W.x = edge + (u < 1 ? u : 2 - u) * span;
+    const OFF = 5;                                       // the walk starts and ends this far off the bay, on the landings
+    const beta = vib.beta || 0.02, fn = vib.fn || 4;
+    const tau = 1 / (2 * PI * beta * fn);                // resonant build-up / free-decay time constant
+    let dx = 0;
+    if (W.pause > 0) {
+      W.pause -= dtP;                                     // standing off the bay while the floor's response decays
+      if (W.pause <= 0) W.dir = -W.dir;                   // then turn round and walk back
+    } else {
+      dx = dtP * this.stepHz * STEP;
+      W.x += W.dir * dx;
+      if ((W.dir > 0 && W.x >= m.Lg + OFF) || (W.dir < 0 && W.x <= -OFF)) {
+        W.x = W.dir > 0 ? m.Lg + OFF : -OFF;
+        W.pause = Math.max(3, 5 * tau);                   // 5 time constants: the response falls below 1 %
+      }
+    }
+    const dir = W.dir;
     W.z = m.Lj / 2;
     this.walker.rotation.y = dir > 0 ? 0 : PI;
     // gait: one step = half a cycle. Hips swing as a pendulum, the knee flexes in the swing phase, arms counter-swing.
-    W.gait += dx / STEP * PI;
+    // Standing still: the legs settle together.
     const A = Math.asin(Math.min(0.9, STEP / 2 / R.LEG));
+    if (dx > 0) { W.gait += dx / STEP * PI; W.amp = Math.min(1, (W.amp ?? 1) + dtP * 3); }
+    else W.amp = Math.max(0, (W.amp ?? 1) - dtP * 3);
+    const amp = W.amp;
     for (const L of R.legs) {
       const p = W.gait + (L.side > 0 ? 0 : PI);
-      const hip = A * Math.sin(p), swing = Math.max(0, Math.cos(p));
-      const knee = 0.08 + 0.75 * swing * swing;
+      const hip = amp * A * Math.sin(p), swing = Math.max(0, Math.cos(p));
+      const knee = 0.05 + amp * (0.03 + 0.75 * swing * swing);
       L.hip.rotation.z = hip;
       L.knee.rotation.z = -knee;
       const stance = Math.cos(p) <= 0;
-      L.ankle.rotation.z = -(hip - knee) * (stance ? 1 : 0.6);   // stance foot flat on the floor, swing foot toes down
+      L.ankle.rotation.z = -(hip - knee) * (stance || amp < 0.5 ? 1 : 0.6);   // stance foot flat, swing foot toes down
     }
     for (const a of R.arms) {
       const p = W.gait + (a.side > 0 ? PI : 0);
-      a.sh.rotation.z = 0.7 * A * Math.sin(p);
-      a.el.rotation.z = 0.25 + 0.2 * Math.max(0, Math.sin(p));
+      a.sh.rotation.z = amp * 0.7 * A * Math.sin(p);
+      a.el.rotation.z = 0.2 + amp * (0.05 + 0.2 * Math.max(0, Math.sin(p)));
     }
     // shoe bottoms relative to the walker's origin, and where they are on the floor; _placeWalker sets the height so
     // that no shoe goes into the (moving, sagging) floor and the planted one stands on it
@@ -1033,7 +1060,7 @@ export class Bay3D {
     });
     // a footfall each time a foot lands: footprint and ripple where it lands
     const step = Math.floor(W.gait / PI);
-    if (step !== W.step) {
+    if (step !== W.step && dx > 0) {
       W.step = step;
       const side = step % 2 ? 1 : -1;
       const fx = W.x + dir * STEP / 2 * 0.9, fz = W.z + side * 0.3;
@@ -1049,15 +1076,18 @@ export class Bay3D {
     }
     for (const p of W.prints) { p.age += dt; p.mesh.material.opacity = Math.max(0, 0.85 - p.age * 0.35); }
     while (W.prints.length && W.prints[0].age > 2.6) { const p = W.prints.shift(); this.root.remove(p.mesh); p.mesh.geometry.dispose(); p.mesh.material.dispose(); }
-    // response at mid-bay builds toward DG 11's a_p scaled by the walker's modal position (per foot walked, so the
-    // build-up does not depend on the pace or the slow-motion speed)
+    // Response: a single resonant mode builds up and decays as 1 - e^(-t/tau), tau = 1 / (2 pi beta fn), with the
+    // solver's damping and frequency. Its steady value with the walker at a point is phi(walker) x a_p (DG 11's a_p
+    // already includes R = 0.5 for incomplete resonance, so it is reached exactly at mid-bay, not exceeded). Off the
+    // bay phi = 0 and the response decays freely on the same time constant.
     const target = this.phiAt(W.x, W.z);
-    W.resp += (target - W.resp) * Math.min(1, dx * 1.0);
+    W.resp += (target - W.resp) * (1 - Math.exp(-dtP / tau));
+    W.tau = tau;
     this.liveAccel = (vib.ap || 0) * W.resp;
     // the Peak accel. overlay follows the walker: a_p x phi(walker) x phi(x, z). With the walker at mid-bay and the
     // response built up it is exactly the static DG 11 picture (the solver's a_p); it never exceeds it.
     this.floorU.uAp.value = this.liveAccel;
-    this.opts.onWalk?.({ x: W.x, z: W.z, resp: W.resp, accel: this.liveAccel });
+    this.opts.onWalk?.({ x: W.x, z: W.z, resp: W.resp, accel: this.liveAccel, tau, pausing: W.pause > 0 });
     return W.resp;
   }
 

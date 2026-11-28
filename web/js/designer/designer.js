@@ -466,7 +466,7 @@ export function createDesigner(root, ctx) {
         deckLabel: `${S.deck}" deck (published dataset)`,
         infill: { name: st.infill, dims: shapes.byName[st.infill], studs: st.infill_studs || 0, perRib: 1, camber: st.infill_camber || 0 },
         girder: { name: st.girder, dims: shapes.byName[st.girder], studs: st.girder_studs || 0, perRib: 1, camber: st.girder_camber || 0 },
-        vib: { dj: 0.5, dg: 0.5, fn: st.fn, ap: st.pa, limit: 0.5 },
+        vib: { dj: 0.5, dg: 0.5, fn: st.fn, ap: st.pa, limit: 0.5, beta: window.__msveMeta?.systems?.[S.system]?.building_uses?.[S.use]?.[4] },
         preview: true,
       };
       bay.setModel(m, { animateIn: false });
@@ -529,7 +529,7 @@ export function createDesigner(root, ctx) {
       tc: v.selected_deck_topping_thickness, add: v.Additional_Topping || 0, deckLabel: v.selected_deck,
       infill: { name: iname, dims: shapes.byName[iname], studs: comp ? v.min_req_studs_II : 0, perRib: comp ? v.min_studs_per_rib_II || 1 : 1, camber: comp ? v.camber_II : 0 },
       girder: { name: gname, dims: shapes.byName[gname], studs: comp ? v.min_req_studs_IG : 0, perRib: comp ? v.min_studs_per_rib_IG || 1 : 1, camber: comp ? v.camber_IG : 0 },
-      vib: { dj: v.DEF_j, dg: v.DEF_g, dgr: v.DEF_g_reduced, fn: v.fn, fj: v.fj, fg: v.fg, ap: v.peak_acceleration, limit: v.tolerance_limit, Bj: v.Bj, Bg: v.Bg },
+      vib: { dj: v.DEF_j, dg: v.DEF_g, dgr: v.DEF_g_reduced, fn: v.fn, fj: v.fj, fg: v.fg, ap: v.peak_acceleration, limit: v.tolerance_limit, Bj: v.Bj, Bg: v.Bg, beta: v.damping_ratio ?? v.DR },
     };
   }
 
@@ -877,7 +877,7 @@ export function createDesigner(root, ctx) {
     tb.innerHTML =
       `<div class="vp-group side-toggle"><button id="sideBtn" class="${root.querySelector('.designer').classList.contains('show-side') ? 'on' : ''}" title="Show or hide the results panel">Results ◂</button></div>` +
       grp('Overlay', [['concrete', 'None', 'No colour overlay: see-through concrete'], ['mode', 'Mode shape', 'DG 11 combined mode φ(x, z) from Δj and Δg'], ['accel', 'Peak accel.', 'a_p × φ: DG 11 peak acceleration distributed by the mode shape, with the 0.5 %g contour'], ['defl', 'Deflection', 'DG 11 static deflection Δj + Δg shaped by φ']], bay.floorMode, 'floor') +
-      grp('Motion', [['still', 'Still'], ['vibrate', 'Vibrate', 'Animate the floor at its frequency fn (slowed)'], ['walk', 'Walk test', 'A walker crosses the bay; the Peak accel. colours follow them (illustration: DG 11 a_p × φ at the walker × φ, reaching the solver\'s a_p at mid-bay)']], bay.motion, 'motion') +
+      grp('Motion', [['still', 'Still'], ['vibrate', 'Vibrate', 'Animate the floor at its frequency fn (slowed)'], ['walk', 'Walk test', 'A walker crosses the bay, steps off onto the adjacent floor and waits while the response decays. The Peak accel. colours follow them: DG 11 a_p × φ at the walker × φ, building up and decaying as 1 − e^(−t/τ), τ = 1/(2πβfn); the steady value at mid-bay is the solver\'s a_p.']], bay.motion, 'motion') +
       grp('View', [['iso', '3D'], ['top', 'Plan'], ['section', 'Section', 'Cut through the slab, deck and girders'], ['under', 'Below', 'Underside: deck ribs and studs'], ['close', 'Close-up', 'Corner close-up of the connection and studs']], bay.view, 'view') +
       grp('Show', [['slab', 'Slab'], ['deck', 'Deck'], ['studs', 'Studs'], ['panels', 'Bj / Bg', 'DG 11 effective panel widths and the neighbouring bays'], ['xray', 'X-ray', 'See-through slab and deck'], ['labels', 'Labels'], ['dims', 'Dims'], ['columns', 'Columns']], (v) => L[v], 'layer');
     $('#sideBtn', tb).onclick = () => { root.querySelector('.designer').classList.toggle('show-side'); renderTools(); };
@@ -938,7 +938,9 @@ export function createDesigner(root, ctx) {
     if (bay.motion === 'walk' && walk) {
       html = `<div class="hud-row" style="margin-top:8px"><span>walker at</span><b>${fmt(walk.x, 1)}, ${fmt(walk.z, 1)} ft</b></div>
         <div class="hud-row"><span>response a<sub>p</sub>·φ</span><b style="color:${walk.accel <= lim ? '#A3B376' : '#E57373'}">${fmtFixed(walk.accel, 3)} %g</b></div>
-        <div class="tiny" style="color:#7d8b99;margin-top:4px">Illustration: DG 11's a<sub>p</sub> scaled by the mode shape at the walker (reciprocity).</div>`;
+        <div class="hud-row"><span>τ = 1/(2πβf<sub>n</sub>)</span><b>${fmtFixed(walk.tau, 2)} s</b></div>
+        ${walk.pausing ? '<div class="hud-row"><span>off the bay</span><b>decaying</b></div>' : ''}
+        <div class="tiny" style="color:#7d8b99;margin-top:4px">Illustration: DG 11's a<sub>p</sub> × the mode shape at the walker (reciprocity), building up and decaying as 1 − e<sup>−t/τ</sup> with the solver's β and f<sub>n</sub>.</div>`;
     } else if (p) {
       html = `<div class="hud-row" style="margin-top:8px"><span>at x, z</span><b>${fmt(p.x, 1)}, ${fmt(p.z, 1)} ft</b></div>
         <div class="hud-row"><span>φ</span><b>${fmtFixed(p.phi, 3)}</b></div>
