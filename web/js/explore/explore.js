@@ -286,26 +286,38 @@ export function createExplorer(root, ctx) {
 
   // ---------------------------------------------------------------- 3D landscape
   function land(d, rs) {
-    const k = F.metric === 'method' ? 'ipa' : F.metric;
+    const cat = F.metric === 'method';
+    const k = cat ? 'ipa' : F.metric;
     const M = METRICS[k];
-    $('#xTitle', root).innerHTML = `Height: ${esc(M.label)} · colour: average initial peak acceleration`;
-    const cells = grid(d, rs, k), pa = grid(d, rs, 'ipa');
+    const cells = grid(d, rs, k), pa = grid(d, rs, 'ipa'), meth = cat ? grid(d, rs, 'method') : null;
     const vals = [...cells.values()].map(c => c.v).filter(Number.isFinite);
-    const lo = Math.min(...vals, k === 'ipa' ? 0 : Infinity), hi = Math.max(...vals);
-    const pvals = [...pa.values()].map(c => c.v).filter(Number.isFinite);
-    const pmax = Math.max(...pvals);
+    // zero is meaningful for accelerations and percentages; carbon and frequency start at their lowest value
+    const zero = ['ipa', 'over', 'dec', 'pass'].includes(k);
+    const lo = zero ? Math.min(0, ...vals) : Math.min(...vals), hi = Math.max(...vals);
+    const u = unitOf(k);
+    $('#xTitle', root).innerHTML = cat
+      ? `Height: average initial peak acceleration · colour: most efficient mitigation`
+      : `Height and colour: ${esc(M.label)}${u ? ` (${esc(u)})` : ''}`;
+    const colorOf = cat
+      ? (c) => METHOD_COLORS[meth.get(c.g * 100 + c.i)?.v] || '#555'
+      : (c) => cmapCss((c.v - lo) / (hi - lo || 1));
     landscape?.dispose();
-    landscape = makeLandscape(stage, cells, pa, lo, hi, pmax, k, (c) => {
-      if (!c) { tip.hidden = true; return; }
-    }, (c, e) => {
+    landscape = makeLandscape(stage, cells, { lo, hi, k, colorOf, top: `${fmt(hi, 3)} ${u}`.trim(), bottom: `${fmt(lo, 3)} ${u}`.trim() }, (c, e) => {
       if (!c) { tip.hidden = true; return; }
       const r = stage.getBoundingClientRect();
       tip.hidden = false;
       tip.style.left = Math.min(e.clientX - r.left + 14, r.width - 200) + 'px';
       tip.style.top = (e.clientY - r.top + 14) + 'px';
-      tip.innerHTML = `<b>L<sub>g</sub> ${c.g} × L<sub>j</sub> ${c.i} ft</b><div class="t-row"><span>${esc(M.label)}</span><b>${fmt(c.v, 3)} ${unitOf(k)}</b></div><div class="t-row"><span>avg initial PA</span><b>${fmt(pa.get(c.g * 100 + c.i)?.v, 3)} %g</b></div>`;
+      const m = cat ? meth.get(c.g * 100 + c.i)?.v : null;
+      tip.innerHTML = `<b>L<sub>g</sub> ${c.g} × L<sub>j</sub> ${c.i} ft</b><div class="t-row"><span>${esc(M.label)}</span><b>${fmt(c.v, 3)} ${u}</b></div>`
+        + (cat ? `<div class="t-row"><span>most efficient mitigation</span><b>${esc(METHOD_LABELS[m] || '—')}</b></div>`
+          : k === 'ipa' ? '' : `<div class="t-row"><span>avg initial PA</span><b>${fmt(pa.get(c.g * 100 + c.i)?.v, 3)} %g</b></div>`);
     }, (c) => { sel = { g: c.g, i: c.i }; renderSelection(d); });
-    $('#xFoot', root).innerHTML = `<span>colour: initial PA 0</span><div style="width:200px;height:10px;border-radius:3px;background:${GRADIENT}"></div><span>${fmt(pmax, 2)} %g</span><span>· glass plane: 0.5 %g${k === 'ipa' ? '' : ' (shown when height is peak acceleration)'}</span><span class="spacer"></span><span>Drag to orbit · click a bay</span>`;
+    const present = cat ? [1, 6, 4, 5].filter(m => [...meth.values()].some(c => c.v === m)) : [];
+    $('#xFoot', root).innerHTML = (cat
+      ? present.map(m => `<span class="row"><i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${METHOD_COLORS[m]}"></i>${METHOD_LABELS[m]}</span>`).join('')
+      : `<span>${fmt(lo, 3)}</span><div style="width:200px;height:10px;border-radius:3px;background:${GRADIENT}"></div><span>${fmt(hi, 3)} ${u}</span>`)
+      + `<span>· bar height from ${zero ? '0' : `the lowest value (${fmt(lo, 3)})`}${k === 'ipa' ? '; glass plane: 0.5 %g limit' : ''}</span><span class="spacer"></span><span>Drag to orbit · click a bay</span>`;
   }
 
   // ---------------------------------------------------------------- scatter
@@ -554,7 +566,7 @@ export function createExplorer(root, ctx) {
 
 // ---------------------------------------------------------------------------
 // 3D landscape of the design space: x = girder span, z = infill span, height = metric
-function makeLandscape(el, cells, pa, lo, hi, pmax, k, _unused, onHover, onClick) {
+function makeLandscape(el, cells, { lo, hi, k, colorOf, top, bottom }, onHover, onClick) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
   el.append(renderer.domElement);
@@ -576,9 +588,7 @@ function makeLandscape(el, cells, pa, lo, hi, pmax, k, _unused, onHover, onClick
   list.forEach((c, n) => {
     const t = (c.v - lo) / (hi - lo || 1);
     target.push(Math.max(0.05, t * H)); cur.push(0.05);
-    const p = pa.get(c.g * 100 + c.i)?.v ?? 0;
-    const [r, g, b] = rgb(p / (pmax || 1));
-    col.setRGB(r / 255, g / 255, b / 255, THREE.SRGBColorSpace);
+    col.set(colorOf(c));   // CSS colours are sRGB; three converts them to its working space
     mesh.setColorAt(n, col);
   });
   scene.add(mesh);
@@ -593,13 +603,19 @@ function makeLandscape(el, cells, pa, lo, hi, pmax, k, _unused, onHover, onClick
   }
   const grid = new THREE.GridHelper(42, 8, 0x5b6b7a, 0x2c3d50); grid.position.y = -0.01; scene.add(grid);
   // axis labels as sprites
-  const label = (txt, x, y, z) => {
-    const c = document.createElement('canvas'); c.width = 256; c.height = 64;
-    const g = c.getContext('2d'); g.fillStyle = '#b4c0cc'; g.font = '28px system-ui'; g.textAlign = 'center'; g.fillText(txt, 128, 40);
+  const label = (txt, x, y, z, w = 1) => {   // w: width in multiples of the axis-label size
+    const c = document.createElement('canvas'); c.width = 256 * w; c.height = 64;
+    const g = c.getContext('2d'); g.fillStyle = '#b4c0cc'; g.font = '28px system-ui'; g.textAlign = 'center'; g.fillText(txt, 128 * w, 40);
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true }));
-    s.scale.set(8, 2, 1); s.position.set(x, y, z); scene.add(s);
+    s.scale.set(8 * w, 2, 1); s.position.set(x, y, z); scene.add(s);
   };
   label('girder span →', 0, 0.5, 24); label('infill span →', 24, 0.5, 0);
+  // height scale: a post at the back corner, from 0 to the tallest bar's value
+  const post = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-21, 0, -21), new THREE.Vector3(-21, H, -21)]),
+    new THREE.LineBasicMaterial({ color: 0x8796a5 }));
+  scene.add(post);
+  label(bottom, -21, -1.2, -21, 1.6); label(top, -21, H + 1.4, -21, 1.6);
+  if (k === 'ipa') label('0.5 %g limit', -21, (LIMIT - lo) / (hi - lo || 1) * H + 1, -21, 1.6);
   for (const v of [10, 30, 50]) { label(`${v} ft`, v - 30, 0.5, 22.5); label(`${v} ft`, 22.5, 0.5, 30 - v); }
   const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
   const pick = (e) => {

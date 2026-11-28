@@ -16,7 +16,7 @@ const STATE_SHORT = { initial: 'Initial design', infill: 'Upsize infills', girde
 const STATE_KEYS = ['initial', 'infill', 'girder', 'conc', 'steel', 'best'];
 const STATE_COLOR = { initial: '#8b98a5', infill: '#85C1E9', girder: '#FCAE2E', conc: '#E57373', steel: '#4178BE', best: '#A3B376', check: '#ffffff' };
 
-const DEFAULTS = { system: 'composite', mode: 'optimize', g: 30, i: 30, ninf: null, slab: null, conc: 0, deck: 3, pcc: 50, use: 3, clear: 3, fl: 200, fw: 200, is: null, gs: null, ci: null, cg: null, si: null, sg: null, view: 'best' };
+const DEFAULTS = { system: 'composite', mode: 'optimize', g: 30, i: 30, ninf: null, slab: null, gage: null, conc: 0, deck: 3, pcc: 50, use: 3, clear: 3, fl: 200, fw: 200, is: null, gs: null, ci: null, cg: null, si: null, sg: null, view: 'best' };
 // member-check overrides: state key -> request field (composite member check only; null = the solver's value)
 const MEMBER_OVR = { ci: 'camber_infill', cg: 'camber_girder', si: 'studs_infill', sg: 'studs_girder' };
 // most studs the solver's rib rule fits on a span (3 per rib, half-span count strictly below its maximum)
@@ -31,6 +31,7 @@ export function createDesigner(root, ctx) {
   // beam count and slab depth are Custom-design inputs: Optimize always uses the solver's own rules
   const nInf = () => (S.mode === 'check' ? S.ninf : null);
   const slabT = () => (S.mode === 'check' ? S.slab : null);
+  const gageT = () => (S.mode === 'check' ? S.gage : null);
   let calcApi = null;
 
   // ------------------------------------------------------------------ layout
@@ -131,6 +132,8 @@ export function createDesigner(root, ctx) {
             <button type="button" class="btn btn-ghost btn-sm" id="ninfUp" aria-label="More beams" style="border:0;padding:4px 10px">+</button><span style="margin-left:auto">beams</span></div></div></div>
         <div class="field"><div class="field-label"><span>Total slab depth${help('Deck rib depth plus concrete above the ribs. Auto: the solver picks the lightest deck and topping in its table that carry the load. The other options are the depths the deck table offers for the deck and concrete chosen under Slab.')}</span><span class="hint" id="slabV"></span></div>
           <div class="seg seg-block" id="slabSeg"></div></div>
+        <div class="field"><div class="field-label"><span>Deck gauge${help('Steel deck gauge (thickness) from the solver\'s deck table: 22 ga is the thinnest and lightest, 16 ga the thickest; a heavier gauge spans further during construction. Auto: the solver picks the lightest deck that works. A gauge you pick limits the deck table to that gauge, and the solver then picks the lightest slab depth that works (or yours, if you set one). The Auto beam count still uses the 22 ga row, as in the paper; set the beams yourself to use a heavier gauge\'s longer span.')}</span><span class="hint" id="gageV"></span></div>
+          <div class="seg seg-block" id="gageSeg">${['auto', 22, 20, 19, 18, 16].map(g => `<button data-v="${g}">${g === 'auto' ? 'Auto' : g + ' ga'}</button>`).join('')}</div></div>
         <div class="field" id="ovrField"><div class="field-label"><span>Camber and studs${help('Optional. Leave a box blank and the paper\'s solver sets the value (shown in grey). Solver camber: 0.8 × the construction deflection, rounded to ¼ in, only when that exceeds ⅝ in on spans of 24 ft or more. Solver studs: the fewest ¾ in studs that reach the degree of composite action. A number you type replaces the solver\'s value on that member. Your studs then set ΣQn (half the studs on each side of midspan × Qn, up to full composite), the solver\'s rule for fitting them in the ribs is kept, and the member must still reach 25 % composite.')}</span><button type="button" class="link-btn" id="ovrReset">Use solver values</button></div>
           <table class="ovr"><tr><th></th><th>Infill beam</th><th>Girder</th></tr>
             <tr><td>Camber</td><td><div class="num-box" id="ciB"><input type="number" id="ciN" min="0" max="4" step="0.25" aria-label="Infill camber in inches (blank = solver)"><span>in</span></div></td>
@@ -140,7 +143,6 @@ export function createDesigner(root, ctx) {
           <div class="sub-unit" id="ovrInfo"></div></div>
         <button class="btn btn-sm btn-ghost" id="useOpt" style="margin:-4px 0 12px">Start from the optimizer's design</button>
       </div>
-      <div id="assume"></div>
 
       <div class="panel-title">Bay</div>
       <div style="display:flex;justify-content:center;margin:-4px 0 6px" id="plan"></div>
@@ -150,7 +152,7 @@ export function createDesigner(root, ctx) {
       <div class="panel-title">Slab</div>
       <div class="field"><div class="field-label"><span>Concrete</span></div>
         <div class="seg seg-block" id="concSeg"><button data-v="0">Normal-weight <span class="muted tiny">145 pcf</span></button><button data-v="1">Lightweight <span class="muted tiny">110 pcf</span></button></div></div>
-      <div class="field"><div class="field-label"><span>Deck rib depth${help('Composite steel deck profile (VL type). The solver picks the gauge and the concrete above the ribs from its deck table, for the infill spacing it chose.')}</span></div>
+      <div class="field"><div class="field-label"><span>Deck rib depth${help('Composite steel deck profile (VL type). The solver picks the gauge and the concrete above the ribs from its deck table, for the infill spacing it chose. Set your own gauge and slab depth in Custom design.')}</span></div>
         <div class="deck-icons" id="deckBtns">${[1.5, 2, 3].map(d => `<button class="deck-btn" data-v="${d}">${deckIcon(d)}${d}" deck</button>`).join('')}</div></div>
       <div class="field" id="pccField"><div class="field-label"><span>Degree of composite action${help('Partial composite connection: ΣQn as a percent of the force for full composite action (AISC 360 I3). The solver sizes the studs to reach it. Paper studied 25, 50 and 75 %; above about 80 % the studs often cannot fit.')}</span><span class="hint" id="pccV"></span></div>
         <div class="row"><div class="seg seg-block" id="pccSeg" style="flex:1"><button data-v="25">25 %</button><button data-v="50">50 %</button><button data-v="75">75 %</button></div>
@@ -175,7 +177,8 @@ export function createDesigner(root, ctx) {
         <button class="btn btn-primary btn-block" id="runBtn">Run the paper's solver</button>
         <div class="auto-row"><span id="runStat">&nbsp;</span>
           <label class="row" title="Re-run automatically when an input changes">Auto <span class="switch"><input type="checkbox" id="autoChk"><span></span></span></label></div>
-      </div>`;
+      </div>
+      <div id="assume"></div>`;
     bindInputs();
     syncInputs();
   }
@@ -191,6 +194,7 @@ export function createDesigner(root, ctx) {
     }
     $$('#concSeg button', R).forEach(b => b.onclick = () => set({ conc: +b.dataset.v }));
     $$('#deckBtns button', R).forEach(b => b.onclick = () => set({ deck: +b.dataset.v }));
+    $$('#gageSeg button', R).forEach(b => b.onclick = () => set({ gage: b.dataset.v === 'auto' ? null : +b.dataset.v }));
     $$('#ninfAuto button', R).forEach(b => b.onclick = () => set({ ninf: null }));
     const nset = (v) => set({ ninf: Math.max(1, Math.min(14, Math.round(v))) });
     $('#ninfDn', R).onclick = () => nset((S.ninf || autoBeams()) - 1);
@@ -240,6 +244,8 @@ export function createDesigner(root, ctx) {
     $('#slabSeg', R).innerHTML = `<button data-v="auto" class="${S.slab ? '' : 'on'}">Auto</button>` + opts.map(t => `<button data-v="${t}" class="${S.slab === t ? 'on' : ''}">${t}"</button>`).join('');
     $$('#slabSeg button', R).forEach(b => b.onclick = () => set({ slab: b.dataset.v === 'auto' ? null : +b.dataset.v }));
     $('#slabV', R).textContent = S.slab ? `${fmtFixed(S.slab - S.deck, 2)}" above ribs · set by you` : 'lightest that works';
+    $$('#gageSeg button', R).forEach(b => b.classList.toggle('on', b.dataset.v === 'auto' ? !S.gage : +b.dataset.v === S.gage));
+    $('#gageV', R).textContent = S.gage ? 'set by you' : 'lightest that works';
     $('#pccField', R).hidden = S.system !== 'composite';
     $$('#pccSeg button', R).forEach(b => b.classList.toggle('on', +b.dataset.v === S.pcc));
     $('#pccN', R).value = S.pcc;
@@ -323,6 +329,7 @@ export function createDesigner(root, ctx) {
     if (S.view && S.view !== 'best') q.set('st', S.view);
     if (nInf()) q.set('n', nInf());
     if (slabT()) q.set('sl', slabT());
+    if (gageT()) q.set('ga', gageT());
     if (memberOverrides()) for (const k of Object.keys(MEMBER_OVR)) if (S[k] !== null && S[k] !== undefined) q.set(k, S[k]);
     history.replaceState(null, '', `#/designer?${q}`);
   }
@@ -345,6 +352,7 @@ export function createDesigner(root, ctx) {
     S.view = q.get('st') || (S.mode === 'check' ? 'check' : 'best');
     S.ninf = q.has('n') && +q.get('n') >= 1 ? Math.min(14, Math.round(+q.get('n'))) : null;
     S.slab = q.has('sl') && +q.get('sl') > 0 ? +q.get('sl') : null;
+    S.gage = [22, 20, 19, 18, 16].includes(+q.get('ga')) ? +q.get('ga') : null;
     for (const k of Object.keys(MEMBER_OVR)) S[k] = q.has(k) && q.get(k) !== '' && Number.isFinite(+q.get(k)) && +q.get(k) >= 0 ? +q.get(k) : null;
   }
 
@@ -369,7 +377,7 @@ export function createDesigner(root, ctx) {
   }
   // the solver's own camber / studs for the checked pair, remembered from the last run that did not override them
   let solverMem = { key: null };
-  const memberKey = (r) => JSON.stringify([r.system, r.girder_span, r.infill_span, r.conc_type, +r.deck_type, r.percent_comp, r.building_use, r.clear_spans, r.num_infill || null, r.slab_total || null, r.infill_shape, r.girder_shape]);
+  const memberKey = (r) => JSON.stringify([r.system, r.girder_span, r.infill_span, r.conc_type, +r.deck_type, r.percent_comp, r.building_use, r.clear_spans, r.num_infill || null, r.slab_total || null, r.deck_gage || null, r.infill_shape, r.girder_shape]);
   function rememberSolver(res) {
     const v = res.captured?.check?.values;
     if (!v || res.system !== 'composite') return;
@@ -386,6 +394,7 @@ export function createDesigner(root, ctx) {
     if (S.mode === 'check') { b.infill_shape = S.is; b.girder_shape = S.gs; }
     if (nInf()) b.num_infill = nInf();
     if (slabT()) b.slab_total = slabT();
+    if (gageT()) b.deck_gage = gageT();
     Object.assign(b, memberOverrides() || {});
     return b;
   }
@@ -443,7 +452,7 @@ export function createDesigner(root, ctx) {
 
   // ------------------------------------------------------------------ dataset (instant preview + validation)
   function onGrid() {
-    return !nInf() && !slabT() && !memberOverrides() && S.use === 3 && S.clear === 3 && S.fl === 200 && S.fw === 200 && S.g >= 10 && S.g <= 50 && S.i >= 10 && S.i <= 50 &&
+    return !nInf() && !slabT() && !gageT() && !memberOverrides() && S.use === 3 && S.clear === 3 && S.fl === 200 && S.fw === 200 && S.g >= 10 && S.g <= 50 && S.i >= 10 && S.i <= 50 &&
       (S.system === 'noncomposite' || [25, 50, 75].includes(S.pcc));
   }
   async function getDs(sys) { if (!ds[sys]) ds[sys] = await loadDataset(sys); return ds[sys]; }
@@ -478,7 +487,7 @@ export function createDesigner(root, ctx) {
     const r = res.request || {};
     return r.system === S.system && r.girder_span === S.g && r.infill_span === S.i && r.conc_type === S.conc && +r.deck_type === S.deck &&
       (S.system === 'noncomposite' || r.percent_comp === S.pcc) && r.building_use === S.use && r.clear_spans === S.clear &&
-      (r.num_infill || null) === (nInf() || null) && (r.slab_total || null) === (slabT() || null) &&
+      (r.num_infill || null) === (nInf() || null) && (r.slab_total || null) === (slabT() || null) && (r.deck_gage || null) === (gageT() || null) &&
       Object.values(MEMBER_OVR).every(f => (r[f] ?? null) === ((memberOverrides() || {})[f] ?? null));
   }
 
@@ -486,7 +495,7 @@ export function createDesigner(root, ctx) {
     res._match = null;
     // beam count / slab depth set by the user: not the paper's method, so not compared with its dataset
     // (camber and studs apply to the checked pair only; the optimizer's states are the solver's own)
-    if (res.variant && (res.variant.infill_count || res.variant.slab_total)) return;
+    if (res.variant && (res.variant.infill_count || res.variant.slab_total || res.variant.deck_gage)) return;
     const r = res.request;
     const grid = r.building_use === 3 && r.clear_spans === 3 && r.floor_length === 200 && r.floor_width === 200 &&
       r.girder_span >= 10 && r.girder_span <= 50 && r.infill_span >= 10 && r.infill_span <= 50 &&
@@ -565,7 +574,7 @@ export function createDesigner(root, ctx) {
     renderQuick();
     if (!result.ok) {
       out.innerHTML = `<div class="verdict"><h3>No design for these inputs</h3><p class="muted small" style="margin:8px 0 0">${esc(result.error || '')}</p>
-        <p class="small">The solver could not size a deck or members that pass every check.${nInf() || slabT() ? ' With your own beam count or slab depth, the deck table may have no deck that spans that far or carries that slab — try Auto, more beams or another depth.' : ' Try a shorter span, a deeper deck or less composite action.'}</p></div>`;
+        <p class="small">The solver could not size a deck or members that pass every check.${nInf() || slabT() || gageT() ? ' With your own beam count, slab depth or deck gauge, the deck table may have no deck that spans that far or carries that slab — try Auto, more beams, another depth or a heavier gauge.' : ' Try a shorter span, a deeper deck or less composite action.'}</p></div>`;
       return;
     }
     const key = sel();
@@ -854,7 +863,7 @@ export function createDesigner(root, ctx) {
         nInf() ? IN('Beams between girders (set by you)')
           : FX(`solver's rule: widest spacing the deck table allows${S.mode === 'check' ? ' (Auto)' : '; set your own in Custom design'}`)],
       ['Deck / slab', `${esc(v.selected_deck)}; ${fmt(v.Deck_Type + v.selected_deck_topping_thickness + (v.Additional_Topping || 0), 2)} in total depth`,
-        IN(`Deck rib depth, Concrete${slabT() ? ', Total slab depth (set by you)' : ''}`)
+        IN(`Deck rib depth, Concrete${slabT() ? ', Total slab depth (set by you)' : ''}${gageT() ? ', Deck gauge (set by you)' : ''}`)
           + (slabT() ? '' : ' ' + FX(`depth: lightest that works${S.mode === 'check' ? ' (Auto)' : '; set your own in Custom design'}`))],
       comp ? ['Studs', `¾ in, F<sub>u</sub> = 65 ksi; infill ${fmt(v.min_req_studs_II, 0)}${mine('studs_infill')}, girder ${fmt(v.min_req_studs_IG, 0)}${mine('studs_girder')}`,
         userStuds ? IN('Camber and studs (Custom design)') : IN('Degree of composite action (the solver sizes the studs to reach it)') + ' ' + FX('stud size and F<sub>u</sub> fixed in the code')] : null,

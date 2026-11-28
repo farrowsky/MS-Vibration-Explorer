@@ -106,14 +106,19 @@ KNOWN_REPORTING_QUIRKS = {
 #   num_infill_override  -- number of interior infills, instead of deriving it from the deck table
 #   slab_total_override  -- total slab depth (in): the deck table is filtered to rows of that depth
 #                           before the solver picks the lightest deck that passes its checks
+#   deck_gage_override   -- deck gage (22, 20, 19, 18 or 16): the deck table is filtered to rows of that
+#                           gage in the same way (the infill-count rule, which reads the 22 ga row, is kept)
 VARIANT_PATCHES = {
     'user': [
-        ('floor_width, ):', 'floor_width, num_infill_override=None, slab_total_override=None, ):'),
+        ('floor_width, ):', 'floor_width, num_infill_override=None, slab_total_override=None, deck_gage_override=None, ):'),
         ('        NumInfill = max(1, ms.ceil(NumInfill_unrounded))\n',
          '        NumInfill = max(1, ms.ceil(NumInfill_unrounded)) if num_infill_override is None else int(num_infill_override)\n'),
         ('        Deck_Check = Conc_Type_Check & Deck_Type_Check & Span_Check & Load_Check\n',
-         '        Deck_Check = (Conc_Type_Check & Deck_Type_Check & Span_Check & Load_Check) if slab_total_override is None '
-         'else (Conc_Type_Check & Deck_Type_Check & Span_Check & Load_Check & (Total_Depth == float(slab_total_override)))\n'),
+         '        Deck_Check = (Conc_Type_Check & Deck_Type_Check & Span_Check & Load_Check) '
+         'if slab_total_override is None and deck_gage_override is None '
+         'else (Conc_Type_Check & Deck_Type_Check & Span_Check & Load_Check'
+         ' & ((Total_Depth == float(slab_total_override)) if slab_total_override is not None else True)'
+         ' & ((Deck_Gage == int(deck_gage_override)) if deck_gage_override is not None else True))\n'),
     ],
 }
 
@@ -125,8 +130,8 @@ VARIANT_PATCHES = {
 #       half span x Qn, capped at V', and the member needs at least 25 % composite action.
 _FIT = '(max_studs_half_{m} > float(studs_{m}_override) / 2)'
 COMPOSITE_USER_PATCHES = [
-    ('slab_total_override=None, ):',
-     'slab_total_override=None, camber_II_override=None, camber_IG_override=None, '
+    ('deck_gage_override=None, ):',
+     'deck_gage_override=None, camber_II_override=None, camber_IG_override=None, '
      'studs_II_override=None, studs_IG_override=None, ):'),
 ] + [p for m in ('II', 'IG') for p in (
     (f'        req_studs_{m} = np.ceil(req_studs_half_filter_{m} * 2)\n',
@@ -505,6 +510,7 @@ class PaperEngine:
         if self.variant == 'user':
             kw['num_infill_override'] = int(p['num_infill']) if p.get('num_infill') else None
             kw['slab_total_override'] = float(p['slab_total']) if p.get('slab_total') else None
+            kw['deck_gage_override'] = int(p['deck_gage']) if p.get('deck_gage') else None
             if self.composite:
                 for k, src, cast in (('camber_II_override', 'camber_infill', float), ('camber_IG_override', 'camber_girder', float),
                                      ('studs_II_override', 'studs_infill', int), ('studs_IG_override', 'studs_girder', int)):
@@ -784,11 +790,13 @@ class PaperEngine:
                 'name': self.variant,
                 'infill_count': kw.get('num_infill_override'),
                 'slab_total': kw.get('slab_total_override'),
+                'deck_gage': kw.get('deck_gage_override'),
                 'member': {k: kw.get(k) for k in MEMBER_OVERRIDES if kw.get(k) is not None},
                 'note': 'Set by the user instead of by the solver: '
                         + ', '.join(x for x in [
                             f"{kw.get('num_infill_override')} interior infills" if kw.get('num_infill_override') else '',
                             f"{kw.get('slab_total_override'):g} in total slab depth" if kw.get('slab_total_override') else '',
+                            f"{kw.get('deck_gage_override')} ga deck" if kw.get('deck_gage_override') else '',
                             f"infill camber {kw['camber_II_override']:g} in" if kw.get('camber_II_override') is not None else '',
                             f"girder camber {kw['camber_IG_override']:g} in" if kw.get('camber_IG_override') is not None else '',
                             f"{kw['studs_II_override']} studs per infill" if kw.get('studs_II_override') is not None else '',

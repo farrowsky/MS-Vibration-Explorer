@@ -108,6 +108,7 @@ class DesignRequest(BaseModel):
     mode: str = Field('optimize', pattern='^(optimize|check)$')
     num_infill: int | None = Field(None, ge=1, le=14)   # None = the solver decides (published method)
     slab_total: float | None = Field(None, ge=3, le=9)  # total slab depth, in; None = lightest that works
+    deck_gage: int | None = Field(None, ge=16, le=22)   # deck gage 22/20/19/18/16; None = lightest that works
     infill_shape: str | None = None
     girder_shape: str | None = None
     # member check only (composite): None = as the solver sets them
@@ -118,6 +119,7 @@ class DesignRequest(BaseModel):
 
 
 MEMBER_FIELDS = ('camber_infill', 'camber_girder', 'studs_infill', 'studs_girder')
+DECK_GAGES = (22, 20, 19, 18, 16)   # the gages in the solver's deck table (DeckData.csv)
 
 
 def _normalize(req: DesignRequest) -> DesignRequest:
@@ -128,7 +130,7 @@ def _normalize(req: DesignRequest) -> DesignRequest:
 
 
 def _uses_variant(req: DesignRequest) -> bool:
-    return bool(req.num_infill or req.slab_total) or any(getattr(req, k) is not None for k in MEMBER_FIELDS)
+    return bool(req.num_infill or req.slab_total or req.deck_gage) or any(getattr(req, k) is not None for k in MEMBER_FIELDS)
 
 
 def _warnings(req: DesignRequest) -> list[str]:
@@ -150,6 +152,9 @@ def _warnings(req: DesignRequest) -> list[str]:
     if req.slab_total:
         out.append(f'Total slab depth set to {req.slab_total:g} in by the user; by default the solver picks the '
                    'lightest deck and topping that work.')
+    if req.deck_gage:
+        out.append(f'Deck gage set to {req.deck_gage} ga by the user; by default the solver picks the lightest '
+                   'deck that works. The infill-count rule still reads the 22 ga row of the deck table.')
     for k, what, unit in (('camber_infill', 'Infill camber', ' in'), ('camber_girder', 'Girder camber', ' in'),
                           ('studs_infill', 'Studs per infill', ''), ('studs_girder', 'Studs per girder', '')):
         v = getattr(req, k)
@@ -242,6 +247,8 @@ def check_request(req: DesignRequest) -> DesignRequest:
     req = _normalize(req)
     if req.deck_type not in LIMITS['deck_type']:
         raise ServiceError(422, 'deck_type must be 1.5, 2 or 3')
+    if req.deck_gage is not None and req.deck_gage not in DECK_GAGES:
+        raise ServiceError(422, 'deck_gage must be 22, 20, 19, 18 or 16')
     if req.mode == 'check':
         shapes = eng.get_engine(req.system).shapes
         if req.infill_shape not in shapes or req.girder_shape not in shapes:

@@ -113,6 +113,7 @@ function inputsTable(res, v) {
       ['Concrete', i.Conc_Type_num ? 'Lightweight, 110 pcf' : 'Normal-weight, 145 pcf'],
       ['Deck', `${esc(v.selected_deck)}: ${i.Deck_Type} in ribs, continuous over ${i.Clear_Spans} span(s) during construction`],
       ['Total slab depth', `${fmt(v.Deck_Type + v.selected_deck_topping_thickness + (v.Additional_Topping || 0), 2)} in ${r.slab_total ? you : solver + ' <span class="muted">(lightest that works)</span>'}`],
+      ['Deck gauge', `${esc((String(v.selected_deck).match(/VL(\d+)/) || [])[1] || '—')} ga ${r.deck_gage ? you : solver + ' <span class="muted">(lightest that works)</span>'}`],
       ...(comp ? [['Degree of composite action', `${i.percent_comp} %`]] : []),
     ]],
     ['Members', res.mode === 'check' ? [
