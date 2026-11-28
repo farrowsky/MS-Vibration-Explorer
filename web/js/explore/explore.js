@@ -42,7 +42,7 @@ const FIG_PRESETS = {
 };
 
 export function createExplorer(root, ctx) {
-  const F = { system: 'composite', conc: 'all', deck: 'all', pcc: 'all', metric: 'ipa', view: 'heat', x: 'area', y: 'ipa', c: 'area', guides: true, ...store.get('explore', {}) };
+  const F = { system: 'composite', conc: 'all', deck: 'all', pcc: 'all', metric: 'ipa', view: 'heat', x: 'area', y: 'ipa', c: 'area', guides: true, hscale: 'fit', ...store.get('explore', {}) };
   let ds = {}, sel = null, figs = null;
   let landscape = null;
 
@@ -291,8 +291,8 @@ export function createExplorer(root, ctx) {
     const M = METRICS[k];
     const cells = grid(d, rs, k), pa = grid(d, rs, 'ipa'), meth = cat ? grid(d, rs, 'method') : null;
     const vals = [...cells.values()].map(c => c.v).filter(Number.isFinite);
-    // zero is meaningful for accelerations and percentages; carbon and frequency start at their lowest value
-    const zero = ['ipa', 'over', 'dec', 'pass'].includes(k);
+    // height scale: Fit stretches the bars over this slice's range; From 0 keeps heights proportional
+    const zero = F.hscale === 'zero';
     const lo = zero ? Math.min(0, ...vals) : Math.min(...vals), hi = Math.max(...vals);
     const u = unitOf(k);
     $('#xTitle', root).innerHTML = cat
@@ -317,7 +317,9 @@ export function createExplorer(root, ctx) {
     $('#xFoot', root).innerHTML = (cat
       ? present.map(m => `<span class="row"><i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${METHOD_COLORS[m]}"></i>${METHOD_LABELS[m]}</span>`).join('')
       : `<span>${fmt(lo, 3)}</span><div style="width:200px;height:10px;border-radius:3px;background:${GRADIENT}"></div><span>${fmt(hi, 3)} ${u}</span>`)
-      + `<span>· bar height from ${zero ? '0' : `the lowest value (${fmt(lo, 3)})`}${k === 'ipa' ? '; glass plane: 0.5 %g limit' : ''}</span><span class="spacer"></span><span>Drag to orbit · click a bay</span>`;
+      + `<span class="seg" id="hScale" title="Bar height: fitted to this slice's range, or measured from zero"><button data-v="fit" class="${zero ? '' : 'on'}">Fit</button><button data-v="zero" class="${zero ? 'on' : ''}">From 0</button></span>`
+      + `<span>height ${zero ? 'from 0' : `${fmt(lo, 3)} to ${fmt(hi, 3)}`}${k === 'ipa' && LIMIT >= lo && LIMIT <= hi ? ' · glass plane: 0.5 %g limit' : ''}</span><span class="spacer"></span><span>Drag to orbit · click a bay</span>`;
+    root.querySelectorAll('#hScale button').forEach(b => b.onclick = () => { F.hscale = b.dataset.v; save(); renderAll(); });
   }
 
   // ---------------------------------------------------------------- scatter
@@ -593,7 +595,7 @@ function makeLandscape(el, cells, { lo, hi, k, colorOf, top, bottom }, onHover, 
   });
   scene.add(mesh);
   // limit plane when height is peak acceleration
-  if (k === 'ipa') {
+  if (k === 'ipa' && LIMIT >= lo && LIMIT <= hi) {
     const y = (LIMIT - lo) / (hi - lo || 1) * H;
     const plane = new THREE.Mesh(new THREE.PlaneGeometry(43, 43), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.14, side: THREE.DoubleSide, depthWrite: false }));
     plane.rotation.x = -Math.PI / 2; plane.position.y = y;
@@ -615,7 +617,7 @@ function makeLandscape(el, cells, { lo, hi, k, colorOf, top, bottom }, onHover, 
     new THREE.LineBasicMaterial({ color: 0x8796a5 }));
   scene.add(post);
   label(bottom, -21, -1.2, -21, 1.6); label(top, -21, H + 1.4, -21, 1.6);
-  if (k === 'ipa') label('0.5 %g limit', -21, (LIMIT - lo) / (hi - lo || 1) * H + 1, -21, 1.6);
+  if (k === 'ipa' && LIMIT >= lo && LIMIT <= hi) label('0.5 %g limit', -21, (LIMIT - lo) / (hi - lo || 1) * H + 1, -21, 1.6);
   for (const v of [10, 30, 50]) { label(`${v} ft`, v - 30, 0.5, 22.5); label(`${v} ft`, 22.5, 0.5, 30 - v); }
   const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
   const pick = (e) => {

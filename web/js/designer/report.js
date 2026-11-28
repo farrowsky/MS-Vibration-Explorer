@@ -284,7 +284,6 @@ ${va ? `<tr><td style="width:46%">Solver output columns reproduced from captured
 <tr><td>Solver lines re-executed at this pair</td><td><b>${rc.n_ok}</b> reproduce, <b>${rc.n_bad}</b> differ, ${rc.n_skip} not re-evaluable ${rc.n_bad === 0 ? '<span class="pill pass">pass</span>' : '<span class="pill fail">check</span>'}</td></tr>
 <tr><td>Carbon components sum to the solver's EC</td><td>${sp.ok ? '<span class="pill pass">pass</span>' : '<span class="pill fail">check</span>'}</td></tr>
 <tr><td>Published dataset (MS-Vibration-Code)</td><td>${mt ? `<b>${mt.nOk}/${mt.n}</b> values match row ${mt.row + 1} ${mt.nOk === mt.n ? '<span class="pill pass">pass</span>' : '<span class="pill fail">check</span>'}` : '<span class="muted">inputs outside the published grid</span>'}</td></tr></table>
-${va && va.checks.some(c => c.known_quirk && c.ok === false) ? `<div class="small muted" style="margin-top:6px">${esc(va.checks.find(c => c.known_quirk && c.ok === false).known_quirk)}</div>` : ''}
 <h3>Provenance</h3><table><tr><td class="muted" style="width:30%">Solver</td><td>${esc(res.engine.notebook)}, code cells up to <code>sizer_and_calc</code>, executed unmodified</td></tr>
 <tr><td class="muted">Notebook SHA-256</td><td><code>${esc(res.engine.notebook_sha256)}</code></td></tr><tr><td class="muted">Solver cell SHA-256</td><td><code>${esc(res.engine.solver_cell_sha256)}</code></td></tr>
 <tr><td class="muted">Runtime</td><td>Python ${esc(res.engine.python)}, numpy ${esc(res.engine.numpy)}, pandas ${esc(res.engine.pandas)}</td></tr>

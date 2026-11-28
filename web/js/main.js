@@ -140,9 +140,6 @@ async function renderAbout() {
     <h2>Provenance</h2>
     <table class="prov-table" id="provTable"><tr><td>Loading…</td><td></td></tr></table>
 
-    <h2>Known reporting quirk found by the validation</h2>
-    <div id="quirks" class="small"></div>
-
     <h2>Cite</h2>
     <p>S. D. Farrow, N. C. Brown, R. L. Solnosky. <i>Carbon-Efficient Design Strategies for Mitigating Footfall Vibration in Steel Framed
       Floor Systems.</i> Engineering Structures (under review), 2026. Code and data: MS-Vibration-Code. This tool: ${APP_NAME}.
@@ -162,7 +159,6 @@ async function renderAbout() {
       : `<tr><td>Server runtime</td><td>Python ${esc(p.python)}, numpy ${esc(p.numpy)}, pandas ${esc(p.pandas)} · tool ${esc(meta.version)}</td></tr>`);
     rows.push(`<tr><td>Design-space data</td><td><code>data/imperial/composite_results_imperial.csv</code> (30,258 rows) and <code>noncomposite_results_imperial.csv</code> (10,086 rows) from the MS-Vibration-Code release, packed without changing values</td></tr>`);
     $('#provTable').innerHTML = rows.join('');
-    $('#quirks').innerHTML = meta.known_quirks.map(q => `<p><b>${esc(q.state)} · ${esc(q.column)}</b> — ${esc(q.note)}</p>`).join('');
   } catch (e) {
     $('#provTable').innerHTML = `<tr><td>Server</td><td class="muted">Not reachable (${esc(e.message)}). The Design Space module still works offline.</td></tr>`;
   }
