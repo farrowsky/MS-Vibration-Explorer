@@ -110,7 +110,8 @@ async function renderAbout() {
     <div class="steps">
       <div class="step"><b>1 · The paper's code, verbatim</b><p>The server reads the two published notebooks
         (<code>Composite MS Code.ipynb</code>, <code>Non-Composite MS Code.ipynb</code>) and executes their solver cells unmodified. Their
-        SHA-256 hashes are shown on every result.</p></div>
+        SHA-256 hashes are shown on every result. A Custom design with your own beam count, slab, deck gauge, camber or studs runs
+        a copy with one-line overrides for those values only, and every result that uses it says so.</p></div>
       <div class="step"><b>2 · Every intermediate value</b><p>Python's <code>sys.monitoring</code> observes the solver's inner
         <code>mitigation_method()</code> and copies its ~400 local variables at the selected infill/girder pair — read-only, so the
         solver computes exactly what it always does.</p></div>

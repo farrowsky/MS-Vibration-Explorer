@@ -188,6 +188,8 @@ export function buildReport({ result: res, key, calcInfo, shapes, views = [], mo
   const sp = C.carbonSplit(cap, calcInfo);
   const va = cap.validation, rc = cap.recheck, mt = res._match;
   const pass = v.peak_acceleration <= v.tolerance_limit;
+  // values the user set in Custom design (the solver copy with one-line overrides), as a short list
+  const ovrTxt = res.variant ? res.variant.note.replace(/^Set by the user instead of by the solver: /, '').replace(/\. Uses a copy[\s\S]*$/, '') : '';
   const title = `${res.system === 'composite' ? 'Composite' : 'Non-composite'} bay ${res.inputs.Girder_Span} × ${res.inputs.Infill_Span} ft — ${NAMES[key]}`;
   const memberRow = (lab, mm) => {
     const d = shapes.byName[mm.name] || {};
@@ -234,7 +236,8 @@ export function buildReport({ result: res, key, calcInfo, shapes, views = [], mo
 ${disc}
 
 <div class="sec"><h2>1 · Summary</h2>
-<div class="verdict ${pass ? 'ok' : 'bad'}"><b>${pass ? '✓ Meets' : '✗ Exceeds'} the DG 11 walking limit</b> — a<sub>p</sub>/g = ${fmtFixed(v.peak_acceleration, 3)} %g against ${v.tolerance_limit} %g, with infill <code>${esc(model.infill.name)}</code> and girder <code>${esc(model.girder.name)}</code>${C.structuralPass(calcInfo, v) ? '; every strength and deflection check passes' : '; <b>at least one strength or deflection check fails</b> (section 4)'}.</div>
+<div class="verdict ${pass && C.structuralPass(calcInfo, v) ? 'ok' : 'bad'}"><b>${pass ? '✓ Meets' : '✗ Exceeds'} the DG 11 walking limit</b> — a<sub>p</sub>/g = ${fmtFixed(v.peak_acceleration, 3)} %g against ${v.tolerance_limit} %g, with infill <code>${esc(model.infill.name)}</code> and girder <code>${esc(model.girder.name)}</code>${C.structuralPass(calcInfo, v) ? '; every strength and deflection check passes' : '; <b>at least one strength or deflection check fails</b> (section 4)'}.</div>
+${res.variant ? `<div class="small" style="margin:6px 0 0"><b>Set by the user:</b> ${esc(ovrTxt)}. These values run through a copy of the published solver with one-line overrides; everything else is the published solver (section 8).</div>` : ''}
 <div class="kpis"><div class="kpi"><span class="muted tiny">Peak acceleration</span><b style="color:${pass ? 'var(--pass)' : 'var(--fail)'}">${fmtFixed(v.peak_acceleration, 4)} %g</b><span class="tiny">limit ${v.tolerance_limit} %g — ${pass ? 'meets' : 'exceeds'}</span></div>
 <div class="kpi"><span class="muted tiny">Floor frequency f<sub>n</sub></span><b>${fmtFixed(v.fn, 3)} Hz</b><span class="tiny">f<sub>j</sub> ${fmtFixed(v.fj, 3)} · f<sub>g</sub> ${fmtFixed(v.fg, 3)}</span></div>
 <div class="kpi"><span class="muted tiny">Embodied carbon</span><b>${fmtFixed(v.EC_scaled * FT2_PER_M2, 3)} kg CO₂e/m²</b><span class="tiny">${fmtFixed(v.EC_scaled / LB_TO_KG, 4)} lb CO₂e/ft² · ${fmt(v.EC, 1)} kg per bay</span></div>
@@ -284,8 +287,8 @@ ${va ? `<tr><td style="width:46%">Solver output columns reproduced from captured
 <tr><td>Solver lines re-executed at this pair</td><td><b>${rc.n_ok}</b> reproduce, <b>${rc.n_bad}</b> differ, ${rc.n_skip} not re-evaluable ${rc.n_bad === 0 ? '<span class="pill pass">pass</span>' : '<span class="pill fail">check</span>'}</td></tr>
 <tr><td>Carbon components sum to the solver's EC</td><td>${sp.ok ? '<span class="pill pass">pass</span>' : '<span class="pill fail">check</span>'}</td></tr>
 <tr><td>Published dataset (MS-Vibration-Code)</td><td>${mt ? `<b>${mt.nOk}/${mt.n}</b> values match row ${mt.row + 1} ${mt.nOk === mt.n ? '<span class="pill pass">pass</span>' : '<span class="pill fail">check</span>'}` : '<span class="muted">inputs outside the published grid</span>'}</td></tr></table>
-<h3>Provenance</h3><table><tr><td class="muted" style="width:30%">Solver</td><td>${esc(res.engine.notebook)}, code cells up to <code>sizer_and_calc</code>, executed unmodified</td></tr>
-<tr><td class="muted">Notebook SHA-256</td><td><code>${esc(res.engine.notebook_sha256)}</code></td></tr><tr><td class="muted">Solver cell SHA-256</td><td><code>${esc(res.engine.solver_cell_sha256)}</code></td></tr>
+<h3>Provenance</h3><table><tr><td class="muted" style="width:30%">Solver</td><td>${esc(res.engine.notebook)}, code cells up to <code>sizer_and_calc</code>, ${res.variant ? `run with one-line overrides for the values set by the user (${esc(ovrTxt)}); with those on Auto the copy gives the same results as the published cell` : 'executed unmodified'}</td></tr>
+<tr><td class="muted">Notebook SHA-256</td><td><code>${esc(res.engine.notebook_sha256)}</code></td></tr><tr><td class="muted">Solver cell SHA-256</td><td><code>${esc(res.engine.solver_cell_sha256)}</code>${res.variant ? ' <span class="muted">(the published cell, before the overrides)</span>' : ''}</td></tr>
 <tr><td class="muted">Runtime</td><td>Python ${esc(res.engine.python)}, numpy ${esc(res.engine.numpy)}, pandas ${esc(res.engine.pandas)}</td></tr>
 <tr><td class="muted">Selected pair</td><td>infill index ${cap.r}, girder index ${cap.c} in the solver's 273 × 273 W-shape matrices${cap.additional_topping ? `; additional topping ${cap.additional_topping} in` : ''}</td></tr></table></div>
 

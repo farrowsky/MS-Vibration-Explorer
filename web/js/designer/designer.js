@@ -568,6 +568,13 @@ export function createDesigner(root, ctx) {
     }
   }
 
+  // the verdict pill: vibration alone can pass while a strength or deflection check fails (Custom design)
+  function verdictPill(pass, structural) {
+    if (!pass) return '<span class="pill fail">✗ exceeds limit</span>';
+    if (structural === false) return '<span class="pill fail" title="Meets 0.5 %g, but at least one strength or deflection check fails">✗ fails strength</span>';
+    return '<span class="pill pass">✓ meets 0.5 %g</span>';
+  }
+
   function renderResults() {
     const out = $('#dOut', root);
     if (!result) return;
@@ -596,13 +603,13 @@ export function createDesigner(root, ctx) {
     let html = `<div class="verdict fade-in">
       <div class="v-top"><div><div class="tiny muted">${res.system === 'composite' ? 'Composite' : 'Non-composite'} · ${S.mode === 'check' ? 'your design' : 'optimized by the paper\'s solver'}</div>
       <h3>${esc(STATE_SHORT[key])}${key === 'best' ? ' <span class="star">★</span>' : ''}</h3></div>
-      ${pass ? '<span class="pill pass">✓ meets 0.5 %g</span>' : '<span class="pill fail">✗ exceeds limit</span>'}</div>
+      ${verdictPill(pass, structural)}</div>
       ${res.variant ? `<div class="warn-box" style="margin-top:8px"><b>Set by you</b> — ${esc(res.variant.note)}${res.variant.member && Object.keys(res.variant.member).length ? ' Your camber and studs apply to your members only; the optimizer’s states use the solver’s own values.' : ''}</div>` : ''}
       ${S.mode === 'optimize' ? `<div class="small" style="margin-top:6px;color:var(--text2)">Lowest-carbon fix chosen by the solver: <b style="color:${METHOD_COLORS[method]}">${esc(methodTxt)}</b></div>` : ''}
       ${S.mode === 'check' && key === 'check' ? (() => {
         const f = calcInfo[res.system] ? C.failingChecks(calcInfo[res.system], v) : { structural: [], filters: [] };
         return `<div class="small" style="margin-top:6px">Strength and deflection: ${structural ? '<span class="pill pass">all pass</span>' : `<span class="pill fail">${f.structural.length} fail</span> <span style="color:var(--text2)">${esc(f.structural.join(' · '))}</span>`}</div>` +
-          (f.filters.length ? `<div class="tiny muted" style="margin-top:4px">Not a structural failure: ${esc(f.filters.join('; ').toLowerCase())} — the optimizer would not have picked this pair.</div>` : '');
+          (f.filters.length ? `<div class="tiny muted" style="margin-top:4px">${structural ? 'Strength is fine, but this' : 'Separately, this'} pair does not meet ${f.filters.length === 1 ? 'this optimizer selection rule' : 'these optimizer selection rules'} (not strength checks), so Optimize would not pick it: ${f.filters.map(x => `“${esc(x.toLowerCase())}”`).join('; ')}.</div>` : '');
       })() : ''}
       <div class="gauge" title="Peak acceleration vs the 0.5 %g tolerance limit (AISC DG 11)">
         <div class="gauge-track"><div class="gauge-limit" style="left:${limit / gmax * 100}%"></div><div class="gauge-mark" style="left:calc(${Math.min(100, summ.pa / gmax * 100)}% - 1px)"></div></div>
@@ -721,10 +728,11 @@ export function createDesigner(root, ctx) {
       const v = result.captured[key].values;
       const limit = v.tolerance_limit ?? 0.5;
       const pass = summ.pa <= limit;
+      const structural = calcInfo[result.system] ? C.structuralPass(calcInfo[result.system], v) : null;
       const ec = ecFromSolver(summ.ec);
       q.innerHTML = `
         <div class="q-top"><b>${esc(STATE_SHORT[key])}${key === 'best' ? ' <span class="star">★</span>' : ''}</b>
-          ${pass ? '<span class="pill pass">✓ meets 0.5 %g</span>' : '<span class="pill fail">✗ exceeds limit</span>'}</div>
+          ${verdictPill(pass, structural)}</div>
         <dl class="q-kpis">
           <div><dt>Peak accel.</dt><dd><b style="color:${pass ? 'var(--pass)' : 'var(--fail)'}">${fmtFixed(summ.pa, 3)}</b> %g <span class="muted">· ${fmtFixed(summ.pa / limit, 2)}×</span></dd></div>
           <div><dt>Frequency</dt><dd><b>${fmtFixed(summ.fn, 2)}</b> Hz</dd></div>
@@ -1025,7 +1033,7 @@ export function createDesigner(root, ctx) {
     body.innerHTML = '<div class="muted">Loading the solver cell…</div>';
     const src = await api.source(result.system);
     const lines = src.source.split('\n');
-    body.innerHTML = `<div class="row small" style="margin-bottom:8px;flex-wrap:wrap"><span><b>${esc(src.notebook)}</b>, solver cell (${lines.length} lines) — executed verbatim by this tool.</span><span class="muted tiny">cell SHA-256 <code>${esc(src.cell_sha256)}</code></span></div>
+    body.innerHTML = `<div class="row small" style="margin-bottom:8px;flex-wrap:wrap"><span><b>${esc(src.notebook)}</b>, solver cell (${lines.length} lines) — ${result.variant ? 'shown as published. Your Custom design ran a copy with one-line overrides for the values you set; Optimize runs this cell verbatim.' : 'executed verbatim by this tool.'}</span><span class="muted tiny">cell SHA-256 <code>${esc(src.cell_sha256)}</code></span></div>
       <div class="source-view" id="srcView">${lines.map((l, i) => `<div data-l="${i + 1}"${srcLine === i + 1 ? ' class="hl"' : ''}><span class="ln">${i + 1}</span>${esc(l)}</div>`).join('')}</div>`;
     if (srcLine) { const el = body.querySelector(`[data-l="${srcLine}"]`); el?.scrollIntoView({ block: 'center' }); }
   }
@@ -1062,8 +1070,9 @@ export function createDesigner(root, ctx) {
       d4 += '</tbody></table>';
     }
     const allOk = (va ? va.all_ok !== false : true) && rc.n_bad === 0 && sp.ok && (!mt || mt.nOk === mt.n);
-    let html = `<div class="vsum ${allOk ? 'ok' : 'bad'}"><b>${allOk ? 'What you see is the paper\'s solver, unaltered.' : 'At least one check below does not pass.'}</b>
-      ${allOk ? 'Every number on screen for this design was computed by the published notebooks, read back without error, and agrees with the published study wherever the study covers these inputs.' : 'Open its evidence to see which values differ.'}</div>`;
+    const ovr = res.variant ? esc(res.variant.note.replace(/^Set by the user instead of by the solver: /, '').replace(/\. Uses a copy[\s\S]*$/, '')) : '';
+    let html = `<div class="vsum ${allOk ? 'ok' : 'bad'}"><b>${!allOk ? 'At least one check below does not pass.' : res.variant ? 'What you see is the paper\'s solver, changed only where you set values.' : 'What you see is the paper\'s solver, unaltered.'}</b>
+      ${!allOk ? 'Open its evidence to see which values differ.' : res.variant ? `Every number on screen was computed by a copy of the published solver with one-line overrides for the values you set (${ovr}), read back without error. With those values on Auto the copy gives the same results as the published cell.` : 'Every number on screen for this design was computed by the published notebooks, read back without error, and agrees with the published study wherever the study covers these inputs.'}</div>`;
     html += card(1, 'The results on screen are the solver\'s results', 'The tool reads values from inside the calculation rather than re-deriving them. Here every result the solver reports for this design (members, deflections, a<sub>p</sub>, carbon…) is compared with the value the tool shows.',
       va ? va.all_ok !== false : null, va ? `<b>${va.n_ok} of ${va.n}</b> reported results match${va.n_known_quirk ? ` (+${va.n_known_quirk} known reporting quirk in the published code, explained in the evidence)` : ''}` : 'Not applicable to “Your design”: the solver reports no result table for a pair it did not pick. Check 2 still applies.', va ? d1 : '');
     html += card(2, 'Every calculation line is reproduced', 'Each step shown in the Calculations panel is run again on this design\'s inputs. If the tool had read a value from the wrong place, or the panel showed the wrong line, the re-run would disagree.',
@@ -1074,8 +1083,8 @@ export function createDesigner(root, ctx) {
       mt ? mt.nOk === mt.n : null, mt ? `<b>${mt.nOk} of ${mt.n}</b> values match published row ${mt.row + 1}` : 'These inputs are outside the published grid (residential, 10–50 ft spans in 1 ft steps, 25 / 50 / 75 % composite, deck over 3 spans, 200 × 200 ft floor), so there is no row to compare.', d4);
     html += card(5, 'Checked against the thesis hand calcs', 'The two worked bays and ten spot checks in the thesis appendix (pp. 158–196), done by hand, were run through this tool with the same members. This applies to the tool as a whole, not only this design.',
       true, '<b>361 of 365</b> hand-calculated values match to the digits shown; the other 4 are slips in the hand calcs themselves. <a href="https://github.com/farrowsky/parafloor/blob/main/docs/HAND_CALCS.md" target="_blank" rel="noopener">Value-by-value comparison</a>', '');
-    html += `<h4 style="margin:16px 0 6px">Provenance</h4><table class="prov-table"><tr><td>Solver</td><td><code>${esc(res.engine.notebook)}</code> (MS-Vibration-Code release), code cells up to <code>sizer_and_calc</code>, run verbatim</td></tr>
-      <tr><td>Notebook SHA-256</td><td><code>${esc(res.engine.notebook_sha256)}</code></td></tr><tr><td>Solver cell SHA-256</td><td><code>${esc(res.engine.solver_cell_sha256)}</code></td></tr>
+    html += `<h4 style="margin:16px 0 6px">Provenance</h4><table class="prov-table"><tr><td>Solver</td><td><code>${esc(res.engine.notebook)}</code> (MS-Vibration-Code release), code cells up to <code>sizer_and_calc</code>, ${res.variant ? `run with one-line overrides for the values you set: ${ovr}` : 'run verbatim'}</td></tr>
+      <tr><td>Notebook SHA-256</td><td><code>${esc(res.engine.notebook_sha256)}</code></td></tr><tr><td>Solver cell SHA-256</td><td><code>${esc(res.engine.solver_cell_sha256)}</code>${res.variant ? ' <span class="muted">(the published cell, before your overrides)</span>' : ''}</td></tr>
       <tr><td>Runtime</td><td>Python ${esc(res.engine.python)}, numpy ${esc(res.engine.numpy)}, pandas ${esc(res.engine.pandas)} · solve ${fmt(res.timing_s.solve, 2)} s + capture ${fmt(res.timing_s.capture, 2)} s</td></tr>
       <tr><td>Generated</td><td>${esc(res.generated_utc)} · tool ${esc(res.tool_version)}</td></tr></table>`;
     return html;
