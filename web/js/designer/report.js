@@ -17,7 +17,7 @@ const fig = (body, caption, n) => body ? `<figure class="figbox">${body}<figcapt
 // the watermark: one letter-size page, NOT FOR DESIGN along its diagonal, pale red
 const WM_SVG = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 850 1100" width="850" height="1100">'
   + '<text x="425" y="550" text-anchor="middle" dominant-baseline="middle" transform="rotate(-52 425 550)" textLength="1150" lengthAdjust="spacingAndGlyphs" '
-  + 'font-family="Segoe UI, Roboto, Arial, sans-serif" font-weight="900" font-size="150" fill="#fbe8e8">NOT FOR DESIGN</text></svg>');
+  + 'font-family="Segoe UI, Roboto, Arial, sans-serif" font-weight="900" font-size="150" fill="#e53935" fill-opacity="0.12">NOT FOR DESIGN</text></svg>');
 
 const CSS = `
 :root{--pass:#5f7d22;--fail:#b83c3c;--warn:#b37400;--muted:#5d6b78;--line:#d6dde5;--text:#14202b;--text2:#33424f;--panel:#f6f8fa;--code-bg:#f4f6f9;--accent:#2f6db5;--c2:#2f6db5}
@@ -60,7 +60,7 @@ table.inputs tr.grp td{font-size:9.5px;text-transform:uppercase;letter-spacing:.
 .page{position:relative}
 .wm-sheet{position:absolute;inset:0;pointer-events:none;z-index:50;mix-blend-mode:multiply;background:url("${WM_SVG}") center top/100% auto repeat-y}
 .wm{display:none}
-@media print{.page{background:transparent}.wm-sheet{display:none}.wm{display:grid;position:fixed;inset:0;place-items:center;pointer-events:none;z-index:-1}.wm img{width:100%;height:100%;object-fit:contain;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+@media print{.wm-sheet{display:none}.wm{display:grid;position:fixed;inset:0;place-items:center;pointer-events:none;z-index:50}.wm img{width:100%;height:100%;object-fit:contain;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 /* Mathcad-style regions (same renderer as the app's Calculations panel) */
 :root{--info:#2f6db5;--font:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--mono:Consolas,Menlo,monospace}
 .calc-item{break-inside:avoid;margin:0 0 8px;padding:0 0 8px;border-bottom:1px dotted var(--line)}
