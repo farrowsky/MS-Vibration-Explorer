@@ -10,6 +10,7 @@ import * as C from './calcs.js';
 import { openReport } from './report.js';
 import { mountCalcs } from './calcpanel.js';
 import { columnSplitters } from '../lib/splitters.js';
+import { APP_NAME } from '../lib/brand.js';
 
 const STATE_SHORT = { initial: 'Initial design', infill: 'Upsize infills', girder: 'Upsize girders', conc: 'Add topping', steel: 'Upsize infills + girders', best: 'Best design', check: 'Your design' };
 const STATE_KEYS = ['initial', 'infill', 'girder', 'conc', 'steel', 'best'];
@@ -687,7 +688,11 @@ export function createDesigner(root, ctx) {
       openReport({ result, key: sel(), calcInfo: calcInfo[result.system], shapes, views, model: modelFor(result, sel()) });
     };
     $('#shareBtn', out).onclick = async () => { try { await navigator.clipboard.writeText(location.href); toast('Link copied — it reopens this exact design.'); } catch { toast(location.href); } };
-    $('#jsonBtn', out).onclick = () => downloadText(`bay_${result.system}_${S.g}x${S.i}.json`, JSON.stringify(result, null, 1), 'application/json');
+    $('#jsonBtn', out).onclick = () => downloadText(`bay_${result.system}_${S.g}x${S.i}.json`, JSON.stringify({
+      _disclaimer: `${APP_NAME} is a research showcase, not a design tool. These values come from the solver published with the paper and are for exploring the study only. They are not engineering advice and must not be used to design, check or approve any structure. Provided as is, without warranty, under the MIT License. See DISCLAIMER.md.`,
+      _source: { tool: APP_NAME, version: result.tool_version, generated_utc: result.generated_utc, link: location.href },
+      ...result,
+    }, null, 1), 'application/json');
     $$('[data-goto-tab]', out).forEach(b => b.onclick = () => { tab = b.dataset.gotoTab; store.set('anTab', tab); openAnalysis(); });
   }
 

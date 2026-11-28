@@ -54,6 +54,8 @@ table.inputs tr.grp td{font-size:9.5px;text-transform:uppercase;letter-spacing:.
 @media print{body{background:#fff}.toolbar{display:none}.page{padding:0;max-width:none}h2{break-after:avoid}.pagebreak{break-before:page}
   .runfoot{position:fixed;bottom:-10mm;left:0;right:0;font-size:8.5px;color:#6a7988;text-align:center}}
 .runfoot{display:none} @media print{.runfoot{display:block}}
+.wm{position:fixed;inset:0;display:grid;place-items:center;pointer-events:none;z-index:50;overflow:hidden;mix-blend-mode:multiply}
+.wm span{transform:rotate(-40deg);font:900 min(calc(7.5vw + 5vh),150px)/1 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;letter-spacing:.04em;color:#f3c9c9;white-space:nowrap;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 /* Mathcad-style regions (same renderer as the app's Calculations panel) */
 :root{--info:#2f6db5;--font:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--mono:Consolas,Menlo,monospace}
 .calc-item{break-inside:avoid;margin:0 0 8px;padding:0 0 8px;border-bottom:1px dotted var(--line)}
@@ -213,7 +215,8 @@ export function buildReport({ result: res, key, calcInfo, shapes, views = [], mo
 
   const doc = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Calc report — ${esc(title)}</title><style>${CSS}</style></head><body>
 <div class="toolbar"><b>Calculation report</b><span class="spacer"></span><button onclick="window.print()">Print / save as PDF</button><button class="alt" id="dl">Download HTML</button></div>
-<div class="runfoot">${APP_NAME} — research showcase, not for design · ${esc(res.generated_utc)} · solver cell SHA-256 ${esc(res.engine.solver_cell_sha256.slice(0, 16))}…</div>
+<div class="wm" aria-hidden="true"><span>NOT FOR DESIGN</span></div>
+<div class="runfoot"><b>${APP_NAME} ${esc(res.tool_version)} — research showcase, NOT FOR DESIGN.</b> ${esc(title)} · generated ${esc(res.generated_utc)} · solver cell SHA-256 ${esc(res.engine.solver_cell_sha256.slice(0, 16))}… · farrowsky.github.io/parafloor</div>
 <div class="page">
 <div class="row"><div><div class="muted small">${APP_NAME} · calculation report</div><h1>${esc(title)}</h1>
 <div class="muted small">Generated ${esc(res.generated_utc)} · tool ${esc(res.tool_version)} · ${esc(res.engine.notebook)}</div></div></div>
