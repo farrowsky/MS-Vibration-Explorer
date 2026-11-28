@@ -281,7 +281,7 @@ export function renderAllVars(cap, { filter = '', ci = null } = {}) {
       const line = it.code?.[0]?.line;
       html += `<tr class="calc-row" data-var="${esc(it.var)}"><td>${it.label}${it.member ? ` <span class="muted tiny">(${it.member})</span>` : ''}</td>
         <td>${it.symbol || ''} <code class="muted tiny">${esc(it.var)}</code></td><td class="v">${valueHTML(v, cap.orient[it.var])}</td>
-        <td class="muted tiny">${esc(it.unit || '')}</td><td class="muted tiny">${line ? `L${line}` : ''}</td></tr>`;
+        <td class="muted tiny">${it.unit || ''}</td><td class="muted tiny">${line ? `L${line}` : ''}</td></tr>`;
       shown++;
     }
     html += '</tbody></table>';
