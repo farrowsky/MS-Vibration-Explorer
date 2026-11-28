@@ -279,7 +279,7 @@ ${va && va.checks.some(c => c.known_quirk && c.ok === false) ? `<div class="smal
 
 <div class="calc-sec pagebreak"><h2>Appendix A · Calculations by section</h2>${mcNote}${appx}</div>
 
-<div class="sec pagebreak"><h2>Appendix B · Every captured engine variable</h2>${C.renderAllVars(cap)}</div>
+<div class="sec pagebreak"><h2>Appendix B · Every captured engine variable</h2>${C.renderAllVars(cap, { ci: calcInfo })}</div>
 
 <div class="foot">${disc}
 Cite: S. D. Farrow, N. C. Brown, R. L. Solnosky, <i>Carbon-Efficient Design Strategies for Mitigating Footfall Vibration in Steel Framed Floor Systems</i>, Engineering Structures (under review). Code and data: MS-Vibration-Code (MIT License).</div>

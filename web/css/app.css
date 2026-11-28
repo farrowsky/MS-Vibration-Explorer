@@ -307,6 +307,25 @@ select:focus, .text-in:focus { border-color: var(--accent); }
 .gauge-limit { position: absolute; top: -3px; bottom: -3px; width: 0; border-left: 2px dashed var(--text); opacity: .7; }
 .gauge-lab { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 4px; }
 
+/* engine details: validation cards, grouped engine variables */
+.vsum { border-radius: 9px; padding: 10px 12px; margin-bottom: 12px; font-size: 13px; color: var(--text2); border: 1px solid var(--line); max-width: 980px; }
+.vsum b { color: var(--text); display: block; margin-bottom: 2px; }
+.vsum.ok { border-color: color-mix(in srgb, var(--pass) 45%, transparent); background: color-mix(in srgb, var(--pass) 8%, transparent); }
+.vsum.bad { border-color: color-mix(in srgb, var(--fail) 45%, transparent); background: color-mix(in srgb, var(--fail) 8%, transparent); }
+.vcard { border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; margin-bottom: 8px; background: var(--panel); max-width: 980px; }
+.vc-h { display: flex; gap: 10px; align-items: flex-start; }
+.vc-ic { flex: 0 0 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 14px; background: var(--panel2); color: var(--muted); }
+.vcard.ok .vc-ic { background: color-mix(in srgb, var(--pass) 20%, transparent); color: var(--pass); }
+.vcard.bad .vc-ic { background: color-mix(in srgb, var(--fail) 20%, transparent); color: var(--fail); }
+.vc-t { font-weight: 700; font-size: 13.5px; } .vc-p { font-size: 12.5px; color: var(--text2); margin-top: 2px; } .vc-r { font-size: 12.5px; margin-top: 5px; }
+.vc-d { margin: 8px 0 0 36px; } .vc-d > summary { cursor: pointer; font-size: 12px; color: var(--accent); margin-bottom: 6px; }
+.vars-intro { font-size: 12.5px; color: var(--text2); margin-bottom: 10px; max-width: 980px; }
+.vars-h { margin: 14px 0 4px; font-size: 13px; }
+.calc.vars td:first-child { min-width: 220px; }
+.vars-rest { margin-top: 14px; } .vars-rest > summary { cursor: pointer; margin-bottom: 6px; }
+/* results panel actions: top of the panel, pinned while it scrolls */
+.out-actions { position: sticky; top: -12px; z-index: 6; display: flex; flex-wrap: wrap; gap: 6px; margin: -12px -12px 10px; padding: 10px 12px;
+  background: color-mix(in srgb, var(--bg2) 92%, transparent); backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); }
 /* quick result card: top of the inputs, only where the results panel is a drawer or below the fold */
 .quick-card { display: none; position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); padding: 10px 11px 9px; margin-bottom: 14px; }
 .quick-card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--rainbow); opacity: .9; }

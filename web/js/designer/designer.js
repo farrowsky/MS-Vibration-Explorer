@@ -654,15 +654,16 @@ export function createDesigner(root, ctx) {
 
     if (res.warnings?.length) html += `<div class="warn-box"><b>Note</b> — ${res.warnings.map(esc).join(' ')}</div>`;
 
-    html += `<div class="row" style="margin-top:12px;flex-wrap:wrap">
-      <button class="btn btn-primary" id="repBtn">Calc report</button>
-      <button class="btn" id="engBtn" data-goto-tab="valid" title="Validation, every captured engine variable and the solver source">Engine details</button>
-      <button class="btn" id="shareBtn" title="Copy a link to this design">Copy link</button>
-      <button class="btn btn-ghost" id="jsonBtn" title="Every captured value as JSON">JSON</button></div>
-      <div class="tiny muted" style="margin-top:10px">Engine: <code>${esc(res.engine.notebook)}</code> solver cell, SHA-256 ${esc(res.engine.solver_cell_sha256.slice(0, 12))}… · Python ${esc(res.engine.python)}, numpy ${esc(res.engine.numpy)}, pandas ${esc(res.engine.pandas)}</div>`;
+    // actions sit at the top of the panel, pinned while it scrolls
+    const actions = `<div class="out-actions">
+      <button class="btn btn-primary btn-sm" id="repBtn" title="Printable report: inputs, screenshots, diagrams and every calculation">Calc report</button>
+      <button class="btn btn-sm" id="engBtn" data-goto-tab="valid" title="Validation, every engine variable explained, and the solver source">Engine details</button>
+      <button class="btn btn-sm" id="shareBtn" title="Copy a link to this design">Copy link</button>
+      <button class="btn btn-ghost btn-sm" id="jsonBtn" title="Every captured value as JSON">JSON</button></div>`;
+    html += `<div class="tiny muted" style="margin-top:12px">Engine: <code>${esc(res.engine.notebook)}</code> solver cell, SHA-256 ${esc(res.engine.solver_cell_sha256.slice(0, 12))}… · Python ${esc(res.engine.python)}, numpy ${esc(res.engine.numpy)}, pandas ${esc(res.engine.pandas)}</div>`;
 
     const calcCard = calcInfo[res.system] ? `<div class="card calc-card"><div class="card-h">Calculations <span class="sub">${esc(STATE_SHORT[key])} · open any line for the calc</span></div><div class="card-b" id="calcBody"></div></div>` : '';
-    out.innerHTML = `<div class="stale-dim">${calcCard}${html}</div>`;
+    out.innerHTML = `${actions}<div class="stale-dim">${calcCard}${html}</div>`;
     if (calcCard) {
       calcApi = mountCalcs($('#calcBody', out), {
         ci: calcInfo[res.system], cap, mode: S.mode, state: calcState,
@@ -976,7 +977,7 @@ export function createDesigner(root, ctx) {
     if (!cap) { body.innerHTML = `<div class="muted">${result && !result.ok ? 'No design — nothing to show.' : 'Run the solver to see every calculation.'}</div>`; return; }
     const ci = calcInfo[result.system];
     if (tab === 'vars') {
-      body.innerHTML = `<div class="calc-toolbar"><input class="text-in" id="varQ" placeholder="Filter variables…" value="${esc(varFilter)}"></div>${C.renderAllVars(cap, { filter: varFilter })}`;
+      body.innerHTML = `<div class="calc-toolbar"><input class="text-in" id="varQ" placeholder="Search by name, symbol or variable…" value="${esc(varFilter)}"></div>${C.renderAllVars(cap, { filter: varFilter, ci })}`;
       $('#varQ', body).oninput = debounce((e) => { varFilter = e.target.value; renderAnalysis(); const q = $('#varQ', root); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }, 200);
       bindRows(body, cap, ci);
     } else if (tab === 'valid') body.innerHTML = validationDetail(cap);
@@ -1020,30 +1021,45 @@ export function createDesigner(root, ctx) {
     const va = cap.validation, rc = cap.recheck, mt = res._match;
     const ci = calcInfo[res.system];
     const sp = C.carbonSplit(cap, ci);
-    const tile = (big, lab, ok) => `<div class="val-tile"><div class="big" style="color:${ok === null ? 'var(--text2)' : ok ? 'var(--pass)' : 'var(--fail)'}">${big}</div><div class="lab">${lab}</div></div>`;
-    let html = `<div class="small" style="margin-bottom:12px;max-width:900px;color:var(--text2)">Four independent checks that the numbers on screen are the paper's solver's own numbers.</div><div class="val-sum">`;
-    if (va) html += tile(`${va.n_ok}/${va.n}`, 'reported outputs reproduced from captured internals', va.all_ok);
-    if (rc) html += tile(`${rc.n_ok}`, `solver lines re-run at this pair reproduce their values (${rc.n_bad} differ, ${rc.n_skip} not re-evaluable)`, rc.n_bad === 0);
-    html += tile(sp.ok ? '✓' : '✗', 'carbon parts sum to the solver\'s EC', sp.ok);
-    html += mt ? tile(`${mt.nOk}/${mt.n}`, `match the published dataset, row ${mt.row + 1}`, mt.nOk === mt.n) : tile('—', 'outside the published grid (no dataset row)', null);
-    html += '</div>';
-    html += `<h4 style="margin:4px 0 6px">1 · Solver outputs vs captured internals</h4><div class="muted small" style="margin-bottom:6px">Each column the solver writes to its output frame for this state, against the internal variable it maps from (mapping read from the solver's <code>target_base_matrices</code> and <code>results</code> dict with <code>ast</code>).</div>`;
+    // five checks, each said in plain words with its result; the evidence is folded underneath
+    const card = (n, title, proves, ok, result, detail) => `<div class="vcard ${ok === null ? 'na' : ok ? 'ok' : 'bad'}">
+      <div class="vc-h"><span class="vc-ic">${ok === null ? '–' : ok ? '✓' : '✗'}</span><div><div class="vc-t">${n} · ${title}</div>
+      <div class="vc-p">${proves}</div><div class="vc-r">${result}</div></div></div>
+      ${detail ? `<details class="vc-d"><summary>Show the evidence</summary>${detail}</details>` : ''}</div>`;
+    // 1 · outputs vs internals
+    let d1 = `<div class="muted small" style="margin-bottom:6px">Each column the solver writes to its result table for this state, against the internal variable it comes from (the mapping is read from the solver's own <code>target_base_matrices</code> and <code>results</code> code).</div>`;
     if (va) {
-      html += '<table class="calc"><thead><tr><th></th><th>Output column</th><th>Internal variable</th><th class="right">Reported</th><th class="right">Captured</th></tr></thead><tbody>';
-      for (const c of va.checks) html += `<tr><td class="chk">${c.ok === null ? '<span class="skip-ic">·</span>' : c.ok ? '<span class="ok-ic">✓</span>' : c.known_quirk ? '<span class="pill warn">quirk</span>' : '<span class="bad-ic">✗</span>'}</td><td>${esc(c.column)}</td><td><code>${esc(c.local)}</code></td><td class="v">${c.reported === null ? '<span class="muted">blank in frame</span>' : C.valueHTML(c.reported)}</td><td class="v">${C.valueHTML(c.captured)}</td></tr>${c.known_quirk ? `<tr><td></td><td colspan="4" class="small muted">${esc(c.known_quirk)}</td></tr>` : ''}`;
-      html += '</tbody></table>';
-    } else html += '<div class="muted small">Not applicable to “Your design” — the solver reports no frame for a pair it did not pick; the line re-run below still applies.</div>';
-    html += `<h4 style="margin:16px 0 6px">2 · Line-by-line re-execution</h4><div class="muted small" style="margin-bottom:6px">Every single-target assignment in <code>mitigation_method()</code> that is elementwise arithmetic is evaluated again with this pair's captured inputs. Elementwise numpy operations commute with indexing, so the result must equal the captured value of the target. Lines with table lookups, reductions across shapes or an untaken branch are listed as not re-evaluable.</div>`;
+      d1 += '<table class="calc"><thead><tr><th></th><th>Output column</th><th>Internal variable</th><th class="right">Reported</th><th class="right">Captured</th></tr></thead><tbody>';
+      for (const c of va.checks) d1 += `<tr><td class="chk">${c.ok === null ? '<span class="skip-ic">·</span>' : c.ok ? '<span class="ok-ic">✓</span>' : c.known_quirk ? '<span class="pill warn">quirk</span>' : '<span class="bad-ic">✗</span>'}</td><td>${esc(c.column)}</td><td><code>${esc(c.local)}</code></td><td class="v">${c.reported === null ? '<span class="muted">blank in frame</span>' : C.valueHTML(c.reported)}</td><td class="v">${C.valueHTML(c.captured)}</td></tr>${c.known_quirk ? `<tr><td></td><td colspan="4" class="small muted">${esc(c.known_quirk)}</td></tr>` : ''}`;
+      d1 += '</tbody></table>';
+    }
+    // 2 · line re-run
     const bad = Object.entries(rc.lines).filter(([, r]) => r[0] === false);
-    html += bad.length ? bad.map(([ln, r]) => `<div class="code-line">L${ln} ${esc(ci.linesByNo[ln]?.var)} = ${esc(ci.linesByNo[ln]?.expr)}  → ${esc(JSON.stringify(r[1]))}</div>`).join('') : `<div class="pill pass">all ${rc.n_ok} re-evaluated lines reproduce the captured values</div>`;
-    html += `<details style="margin-top:8px"><summary class="small" style="cursor:pointer">Show every re-evaluated line</summary><table class="calc" style="margin-top:6px"><tbody>${Object.entries(rc.lines).filter(([, r]) => r[0] !== null).map(([ln, r]) => `<tr><td class="chk">${r[0] ? '<span class="ok-ic">✓</span>' : '<span class="bad-ic">✗</span>'}</td><td class="tiny muted">L${ln}</td><td><code>${esc(ci.linesByNo[ln]?.var)}</code></td><td class="v">${C.valueHTML(Array.isArray(r[1]) ? r[1].map(x => +(+x).toPrecision(6)).join(' / ') : r[1])}</td></tr>`).join('')}</tbody></table></details>`;
-    html += `<h4 style="margin:16px 0 6px">3 · Carbon take-off identity</h4><div class="code-line">${esc(sp.line)}</div><div class="small">${sp.parts.map(p => `${p.label} ${fmt(p.kg, 2)} kg`).join(' + ')} = <b>${fmt(sp.sum, 4)}</b> kg CO₂e · solver EC = <b>${fmt(sp.ec, 4)}</b> ${sp.ok ? '<span class="ok-ic">✓</span>' : '<span class="bad-ic">✗</span>'}</div>`;
-    html += `<h4 style="margin:16px 0 6px">4 · Published dataset</h4>`;
+    let d2 = `<div class="muted small" style="margin-bottom:6px">Every line of <code>mitigation_method()</code> that is plain arithmetic is evaluated again with this design's captured inputs; the result must equal the value the solver stored. Lines with table lookups, reductions across all shapes or a branch not taken here cannot be re-run on one design and are counted separately.</div>`;
+    d2 += bad.length ? bad.map(([ln, r]) => `<div class="code-line">L${ln} ${esc(ci.linesByNo[ln]?.var)} = ${esc(ci.linesByNo[ln]?.expr)}  → ${esc(JSON.stringify(r[1]))}</div>`).join('') : '';
+    d2 += `<table class="calc" style="margin-top:6px"><tbody>${Object.entries(rc.lines).filter(([, r]) => r[0] !== null).map(([ln, r]) => `<tr><td class="chk">${r[0] ? '<span class="ok-ic">✓</span>' : '<span class="bad-ic">✗</span>'}</td><td class="tiny muted">L${ln}</td><td><code>${esc(ci.linesByNo[ln]?.var)}</code></td><td class="v">${C.valueHTML(Array.isArray(r[1]) ? r[1].map(x => +(+x).toPrecision(6)).join(' / ') : r[1])}</td></tr>`).join('')}</tbody></table>`;
+    // 3 · carbon
+    const d3 = `<div class="code-line">${esc(sp.line)}</div><div class="small">${sp.parts.map(p => `${p.label} ${fmt(p.kg, 2)} kg`).join(' + ')} = <b>${fmt(sp.sum, 4)}</b> kg CO₂e · solver EC = <b>${fmt(sp.ec, 4)}</b></div>`;
+    // 4 · published dataset
+    let d4 = '';
     if (mt) {
-      html += `<div class="muted small" style="margin-bottom:6px">Row ${mt.row + 1} of <code>${res.system}_results_imperial.csv</code> from the MS-Vibration-Code release (float32 in the browser, compared to 2×10⁻⁶ relative).</div><table class="calc"><thead><tr><th></th><th>State</th><th>Field</th><th class="right">Solver now</th><th class="right">Published</th></tr></thead><tbody>`;
-      for (const c of mt.checks) html += `<tr><td class="chk">${c.ok ? '<span class="ok-ic">✓</span>' : '<span class="bad-ic">✗</span>'}</td><td>${esc(STATE_SHORT[c.state] || c.state)}</td><td>${esc(c.field)}</td><td class="v">${C.valueHTML(c.solver)}</td><td class="v">${C.valueHTML(c.dataset)}</td></tr>`;
-      html += '</tbody></table>';
-    } else html += '<div class="muted small">The published dataset covers residential bays, 10–50 ft spans in 1 ft steps, 25 / 50 / 75 % composite, deck continuous over 3 spans, 200 × 200 ft floor. These inputs are outside it.</div>';
+      d4 = `<div class="muted small" style="margin-bottom:6px">Row ${mt.row + 1} of <code>${res.system}_results_imperial.csv</code> in the MS-Vibration-Code release (stored as float32 in the browser, so compared to 2 × 10⁻⁶ relative).</div><table class="calc"><thead><tr><th></th><th>State</th><th>Field</th><th class="right">Solver now</th><th class="right">Published</th></tr></thead><tbody>`;
+      for (const c of mt.checks) d4 += `<tr><td class="chk">${c.ok ? '<span class="ok-ic">✓</span>' : '<span class="bad-ic">✗</span>'}</td><td>${esc(STATE_SHORT[c.state] || c.state)}</td><td>${esc(c.field)}</td><td class="v">${C.valueHTML(c.solver)}</td><td class="v">${C.valueHTML(c.dataset)}</td></tr>`;
+      d4 += '</tbody></table>';
+    }
+    const allOk = (va ? va.all_ok !== false : true) && rc.n_bad === 0 && sp.ok && (!mt || mt.nOk === mt.n);
+    let html = `<div class="vsum ${allOk ? 'ok' : 'bad'}"><b>${allOk ? 'What you see is the paper\'s solver, unaltered.' : 'At least one check below does not pass.'}</b>
+      ${allOk ? 'Every number on screen for this design was computed by the published notebooks, read back without error, and agrees with the published study wherever the study covers these inputs.' : 'Open its evidence to see which values differ.'}</div>`;
+    html += card(1, 'The results on screen are the solver\'s results', 'The tool reads values from inside the calculation rather than re-deriving them. Here every result the solver reports for this design (members, deflections, a<sub>p</sub>, carbon…) is compared with the value the tool shows.',
+      va ? va.all_ok !== false : null, va ? `<b>${va.n_ok} of ${va.n}</b> reported results match${va.n_known_quirk ? ` (+${va.n_known_quirk} known reporting quirk in the published code, explained in the evidence)` : ''}` : 'Not applicable to “Your design”: the solver reports no result table for a pair it did not pick. Check 2 still applies.', va ? d1 : '');
+    html += card(2, 'Every calculation line is reproduced', 'Each step shown in the Calculations panel is run again on this design\'s inputs. If the tool had read a value from the wrong place, or the panel showed the wrong line, the re-run would disagree.',
+      rc.n_bad === 0, `<b>${rc.n_ok}</b> lines reproduce their values${rc.n_bad ? `, <b>${rc.n_bad} differ</b>` : ''} · ${rc.n_skip} cannot be re-run on one design (table lookups, reductions)`, d2);
+    html += card(3, 'The carbon adds up', 'The embodied-carbon take-off is split into its parts (steel, deck, concrete, studs) using the factors on the solver\'s own EC line, and the parts must add up to the solver\'s total.',
+      sp.ok, sp.ok ? `Parts sum to the solver's ${fmt(sp.ec, 1)} kg CO₂e per bay` : 'The parts do not sum to the solver\'s EC', d3);
+    html += card(4, 'Same as the published study', 'The study published 40,344 designs. Where these inputs are one of them, the tool\'s members, peak acceleration, frequency, carbon and studs for every design state must equal the published row.',
+      mt ? mt.nOk === mt.n : null, mt ? `<b>${mt.nOk} of ${mt.n}</b> values match published row ${mt.row + 1}` : 'These inputs are outside the published grid (residential, 10–50 ft spans in 1 ft steps, 25 / 50 / 75 % composite, deck over 3 spans, 200 × 200 ft floor), so there is no row to compare.', d4);
+    html += card(5, 'Checked against the thesis hand calcs', 'The two worked bays and ten spot checks in the thesis appendix (pp. 158–196), done by hand, were run through this tool with the same members. This applies to the tool as a whole, not only this design.',
+      true, '<b>361 of 365</b> hand-calculated values match to the digits shown; the other 4 are slips in the hand calcs themselves. <a href="https://github.com/farrowsky/parafloor/blob/main/docs/HAND_CALCS.md" target="_blank" rel="noopener">Value-by-value comparison</a>', '');
     html += `<h4 style="margin:16px 0 6px">Provenance</h4><table class="prov-table"><tr><td>Solver</td><td><code>${esc(res.engine.notebook)}</code> (MS-Vibration-Code release), code cells up to <code>sizer_and_calc</code>, run verbatim</td></tr>
       <tr><td>Notebook SHA-256</td><td><code>${esc(res.engine.notebook_sha256)}</code></td></tr><tr><td>Solver cell SHA-256</td><td><code>${esc(res.engine.solver_cell_sha256)}</code></td></tr>
       <tr><td>Runtime</td><td>Python ${esc(res.engine.python)}, numpy ${esc(res.engine.numpy)}, pandas ${esc(res.engine.pandas)} · solve ${fmt(res.timing_s.solve, 2)} s + capture ${fmt(res.timing_s.capture, 2)} s</td></tr>

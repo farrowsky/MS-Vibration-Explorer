@@ -257,16 +257,46 @@ export function carbonSplit(cap, calcInfo) {
   return { parts, sum, ec: v.EC, ok, factors: { steel: fSteel, deck: fDeck, studs: fStud, conc }, line: ecLine };
 }
 
-export function renderAllVars(cap, { filter = '' } = {}) {
+// Every captured value, grouped as the calculation runs (the calc map's sections), each with what it is, its symbol,
+// value and unit, and the notebook line that computes it. Values the calc map does not describe (helper arrays,
+// table lookups, flags) follow in one list.
+export function renderAllVars(cap, { filter = '', ci = null } = {}) {
   const q = filter.trim().toLowerCase();
-  const names = Object.keys(cap.values).filter(k => !q || k.toLowerCase().includes(q)).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-  const tag = { s: 'scalar', r: 'infill', c: 'girder', rc: 'pair', opt: '1/2/3 per rib', tbl: 'table', both: 'shape table', g: 'module constant' };
-  let html = `<div class="muted small" style="margin-bottom:8px">${names.length} of ${Object.keys(cap.values).length} local variables of <code>mitigation_method()</code> captured at infill index ${cap.r}, girder index ${cap.c}. ${cap.skipped?.length || 0} others are whole-table objects or permuted copies that have no single value at a pair.</div>`;
-  html += '<table class="calc"><thead><tr><th>Variable</th><th class="right">Value at the pair</th><th>Indexed by</th></tr></thead><tbody>';
-  for (const k of names) {
-    html += `<tr class="calc-row" data-var="${k}"><td><code>${esc(k)}</code></td><td class="v">${valueHTML(cap.values[k], cap.orient[k])}</td><td class="muted tiny">${tag[cap.orient[k]] || cap.orient[k]}</td></tr>`;
+  const tag = { s: 'scalar', r: 'infill', c: 'girder', rc: 'pair', opt: '1 / 2 / 3 studs per rib', tbl: 'table', both: 'infill and girder', g: 'module constant' };
+  const total = Object.keys(cap.values).length;
+  const seen = new Set();
+  const hit = (...xs) => !q || xs.some(x => String(x || '').toLowerCase().replace(/<[^>]+>/g, '').includes(q));
+  let html = `<div class="vars-intro">These are the values the paper's solver computed for this design, read straight out of
+    <code>mitigation_method()</code> at the selected infill and girder (rows ${cap.r} and ${cap.c} of its 273 × 273 shape matrices).
+    They are grouped in the order the calculation runs; click a row to see the notebook line that computes it, with its inputs.</div>`;
+  let shown = 0;
+  for (const sec of ci?.sections || []) {
+    const items = sec.items.filter(it => it.var in cap.values && hit(it.label, it.var, it.symbol, sec.title));
+    sec.items.forEach(it => seen.add(it.var));
+    if (!items.length) continue;
+    html += `<h4 class="vars-h">${esc(sec.title)}</h4>${sec.blurb ? `<div class="muted small" style="margin:-2px 0 6px">${esc(sec.blurb)}</div>` : ''}
+      <table class="calc vars"><thead><tr><th>Quantity</th><th>Symbol</th><th class="right">Value</th><th>Unit</th><th class="muted">Line</th></tr></thead><tbody>`;
+    for (const it of items) {
+      const v = pickMember(cap.values[it.var], it.member);
+      const line = it.code?.[0]?.line;
+      html += `<tr class="calc-row" data-var="${esc(it.var)}"><td>${it.label}${it.member ? ` <span class="muted tiny">(${it.member})</span>` : ''}</td>
+        <td>${it.symbol || ''} <code class="muted tiny">${esc(it.var)}</code></td><td class="v">${valueHTML(v, cap.orient[it.var])}</td>
+        <td class="muted tiny">${esc(it.unit || '')}</td><td class="muted tiny">${line ? `L${line}` : ''}</td></tr>`;
+      shown++;
+    }
+    html += '</tbody></table>';
   }
-  return html + '</tbody></table>';
+  const rest = Object.keys(cap.values).filter(k => !seen.has(k) && hit(k)).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  if (rest.length) {
+    const open = q || !ci ? ' open' : '';
+    html += `<details class="vars-rest"${open}><summary><b>Other values the solver keeps</b> <span class="muted small">(${rest.length}: helper arrays, table lookups and
+      flags that feed the calculations above)</span></summary><table class="calc"><thead><tr><th>Variable</th><th class="right">Value at the pair</th><th>Indexed by</th></tr></thead><tbody>`;
+    for (const k of rest) html += `<tr class="calc-row" data-var="${esc(k)}"><td><code>${esc(k)}</code></td><td class="v">${valueHTML(cap.values[k], cap.orient[k])}</td><td class="muted tiny">${tag[cap.orient[k]] || cap.orient[k]}</td></tr>`;
+    html += '</tbody></table></details>';
+  }
+  if (q && !shown && !rest.length) html += `<div class="muted">Nothing matches “${esc(filter)}”.</div>`;
+  html += `<div class="muted tiny" style="margin-top:8px">${total} values captured; ${cap.skipped?.length || 0} more are whole-table objects or permuted copies with no single value at this pair.</div>`;
+  return html;
 }
 
 export function tableHTML(tbl, highlight) {
